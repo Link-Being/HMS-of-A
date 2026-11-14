@@ -1,0 +1,12 @@
+# PyTorch z CUDA 12.8+ (RTX 5080 / Blackwell) instaluje ustaw_serwer.sh osobno
+transformers
+librosa
+soundfile
+scikit-learn
+scipy
+mediapipe
+opencv-python-headless
+onnx
+onnxruntime
+onnxscript
+kagglehub

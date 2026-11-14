@@ -1,0 +1,72 @@
+{
+  "3 klasy | surowe": {
+    "reguły": {
+      "bal_acc": 0.41674202446799197
+    },
+    "logistyczna": {
+      "bal_acc": 0.4862475767083431
+    },
+    "gradient_boosting": {
+      "bal_acc": 0.4222420812056293
+    },
+    "mlp": {
+      "bal_acc": 0.40858923995253976
+    }
+  },
+  "3 klasy | kalibracja na osobie": {
+    "reguły": {
+      "bal_acc": 0.41395256155861987
+    },
+    "logistyczna": {
+      "bal_acc": 0.48594363543827207
+    },
+    "gradient_boosting": {
+      "bal_acc": 0.5749191341626839
+    },
+    "mlp": {
+      "bal_acc": 0.5412668252276776
+    }
+  },
+  "czujny vs senny | surowe": {
+    "reguły": {
+      "bal_acc": 0.6463565237198083,
+      "auc": 0.8112492297043654
+    },
+    "logistyczna": {
+      "bal_acc": 0.7001051486648503,
+      "auc": 0.7816841796726708,
+      "acc_nagrania": 0.7542372881355932
+    },
+    "gradient_boosting": {
+      "bal_acc": 0.6614593504620008,
+      "auc": 0.7380074019009748,
+      "acc_nagrania": 0.7203389830508474
+    },
+    "mlp": {
+      "bal_acc": 0.6404217600350319,
+      "auc": 0.7167350589132696,
+      "acc_nagrania": 0.711864406779661
+    }
+  },
+  "czujny vs senny | kalibracja na osobie": {
+    "reguły": {
+      "bal_acc": 0.6421723293557502,
+      "auc": 0.8095136492710673
+    },
+    "logistyczna": {
+      "bal_acc": 0.7638512917982201,
+      "auc": 0.8374366667190262,
+      "acc_nagrania": 0.788135593220339
+    },
+    "gradient_boosting": {
+      "bal_acc": 0.8274809280212789,
+      "auc": 0.9080741970221359,
+      "acc_nagrania": 0.9152542372881356
+    },
+    "mlp": {
+      "bal_acc": 0.8030715877694992,
+      "auc": 0.8842221372833403,
+      "acc_nagrania": 0.8813559322033898
+    }
+  }
+}

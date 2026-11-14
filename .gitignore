@@ -1,0 +1,23 @@
+# Środowiska i pamięć podręczna
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Zbiory danych (własne licencje: MRL Eye, FER-2013, RAVDESS, YawDD, UTA-RLDD, UBFC) i ich pochodne
+monitor/serwer/dane/
+monitor/serwer/rozpakowane/
+monitor/laptop/dane_osdr/
+
+# Dane osobiste z monitora (norma osobista, historia pomiarów, wyniki) - nigdy do repozytorium
+monitor/laptop/dane_centrum/
+monitor/laptop/wyniki*.csv
+monitor/laptop/baza_glosu.json
+**/baza_osobista.json
+**/historia_pomiarow.csv
+
+# Konfiguracja z danymi dostępowymi
+**/rclone.conf
+**/polacz_gdrive.ps1
+.env
