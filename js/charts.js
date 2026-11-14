@@ -49,7 +49,8 @@ const TelemetryCharts = {
     dataPoints.forEach(function(d, i) {
       const x = getX(i);
       const y = getY(d[metricKey]);
-      pointsList.push({ x: x, y: y, val: d[metricKey], label: d.day });
+      const lbl = d.day || d.time || '';
+      pointsList.push({ x: x, y: y, val: d[metricKey], label: lbl });
       if (i === 0) {
         pathD += 'M ' + x + ' ' + y;
         areaD += 'M ' + x + ' ' + (paddingTop + plotH) + ' L ' + x + ' ' + y;
@@ -78,16 +79,20 @@ const TelemetryCharts = {
     // Punkty i etykiety osi X
     let pointsHtml = '';
     let xLabelsHtml = '';
-    pointsList.forEach(function(p) {
+    const labelStep = Math.max(1, Math.floor(pointsList.length / 6));
+
+    pointsList.forEach(function(p, idx) {
       pointsHtml += `
         <g class="chart-point-group">
           <circle cx="${p.x}" cy="${p.y}" r="5" fill="#00d4ff" stroke="#06121f" stroke-width="2" class="chart-dot" />
           <text x="${p.x}" y="${p.y - 10}" fill="#e6f4ff" font-size="11" font-weight="600" text-anchor="middle" font-family="monospace">${p.val} ${unit}</text>
         </g>
       `;
-      xLabelsHtml += `
-        <text x="${p.x}" y="${height - 12}" fill="#88a0b8" font-size="11" text-anchor="middle">${p.label}</text>
-      `;
+      if (idx % labelStep === 0 || idx === pointsList.length - 1) {
+        xLabelsHtml += `
+          <text x="${p.x}" y="${height - 12}" fill="#88a0b8" font-size="11" text-anchor="middle">${p.label}</text>
+        `;
+      }
     });
 
     const svg = `
@@ -113,6 +118,11 @@ const TelemetryCharts = {
   renderCrewComparison: function(containerId, astronauts, metricKey, metricName, unit) {
     const container = document.getElementById(containerId);
     if (!container) return;
+
+    if (!astronauts || astronauts.length === 0) {
+      container.innerHTML = '<div class="empty-chart">Brak danych zalogi do wyswietlenia</div>';
+      return;
+    }
 
     const width = 640;
     const height = 220;

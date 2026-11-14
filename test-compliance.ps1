@@ -1,7 +1,7 @@
 # Skrypt testujacy zgodnosc z wymogami projektu HMS-of-A
 # Weryfikacja: brak emotek, brak nawiasow w tekstach uzytkownika, brak dlugich myslnikow
 
-$files = Get-ChildItem -Path . -Recurse -Include *.html, *.css, *.js, *.md, *.bat -Exclude .git
+$files = Get-ChildItem -Path . -Recurse -Include *.html, *.css, *.js, *.md, *.bat, *.py -Exclude .git
 
 $emojiRegex = "[\uD83C-\uDBFF\uDC00-\uDFFF\u2600-\u27BF]"
 $longDashRegex = "[\u2013\u2014]"
