@@ -1,152 +1,116 @@
 # HMS-of-A
 
-System Telemetrii Medycznej i Monitorowania Zdrowia Astronautow
+Health Monitoring System of Astronauts - a web-based medical telemetry, cabin environment monitoring, and anomaly detection platform for orbital station crews.
 
-## Opis projektu
+## Overview
 
-Aplikacja webowa sluzaca do prezentacji, analizy oraz zarzadzania danymi medycznymi czlonkow zalogi stacji kosmicznej. System umozliwia ciagly nadzor parametrow zyciowych, rejestracje objawow, wydawanie zalecen lekarskich oraz dostep do procedur profilaktycznych i wsparcia motywacyjnego.
+HMS-of-A combines a Flask telemetry backend, a multi-criteria physiological and environmental scoring engine, and a zero-dependency vanilla JavaScript dashboard designed for mission commanders and individual astronauts on the Horyzont Jeden orbital station.
 
-## Uwierzytelnianie i przykladowe konta dostepowe
+Key capabilities:
+- Real-time crew biometrics and ECLSS cabin environment streaming backed by NASA OSDR RR-1 telemetry in `dane/osdr_RR1.json`
+- Multi-criteria health assessment across 20 parameters and 7 medical domains combining reference norms, adaptive personal baselines, and a denoising autoencoder
+- Role-based authentication with full-fleet oversight for the Commander and personal medical dashboards for crew members
+- Interactive SVG trend charts, radial gauges, step-by-step diagnostic procedures, microgravity prophylaxis guidelines, and critical emergency protocols
+- Switchable `demo` and `real` operational modes, manual telemetry entry, simulated Garmin profile import, and plain-text diagnostic report export
 
-W aplikacji wdrozeno dedykowany panel logowania zabezpieczajacy dostep do danych medycznych. Szybkie przelaczanie kont zostalo zastapione autoryzacja za pomoca identyfikatora oraz hasla. Po zalogowaniu uzytkownik ma mozliwosc zakonczenia sesji przyciskiem Wyloguj.
+## Architecture and Health Model
 
-Pod formularzem logowania znajduje sie czytelny wykaz wszystkich przykladowych kont dostepowych wraz z przyciskami umozliwiajacymi automatyczne uzupelnienie pol formularza jednym kliknieciem.
+The `model/` package evaluates incoming crew and cabin telemetry without requiring heavy external ML frameworks:
 
-## Tryby dzialania i konta dostepowe
+- `model/normy.py` - Reference thresholds classified as `norma`, `uwaga`, or `alarm` across 7 domains: ECLSS cabin environment, cardiovascular and respiratory, sleep and recovery, stress and workload, activity and endurance, sweat biochemistry, and EEG cognitive readiness
+- `model/baza_osobista.py` - Exponentially weighted personal and cabin baselines stored per astronaut in `dane/bazy_osobiste/`, updated only during in-norm readings to prevent baseline drift during alerts
+- `model/anomalie.py` - Unsupervised denoising autoencoder with `11 -> 16 -> 4 -> 16 -> 11` `tanh` architecture loaded from `dane/anomalie.json` with pure-Python inference and optional NumPy acceleration, falling back to `BazaOnline` session statistics when untrained
+- `model/odchylenia.py` and `model/stan.py` - Combines reference threshold violations, personal z-scores, and autoencoder reconstruction residuals into smoothed readiness indices `0-100` with hysteresis and dwell timers to prevent alert flickering
+- `model/raport.py` - Generates structured Polish-language clinical summary reports with cross-signal correlation rules such as elevated CO2 with reduced cognitive readiness or elevated stress with suppressed HRV
+- `model/ucz_anomalie.py` - Offline training CLI for retraining `dane/anomalie.json` from `dane/historia_pomiarow.csv` and `dane/osdr_RR1.json`
 
-System umozliwia prace w dwoch srodowiskach:
-1. Tryb rzeczywisty: domyslny stan operacyjny. Baza zalogi jest poczatkowo wyczyszczona z personelu testowego i zawiera jedynie konto Kierownika Marka Marczaka. Uzytkownik ma pelna swobode dodawania wlasnych astronautow, tworzenia kont dostepowych oraz rejestrowania biezacych pomiarow telemetrycznych.
-2. Tryb demonstracyjny: srodowisko prezentacyjne z gotowa zaloga pieciu astronautow oraz kierownikiem misji, ze zdefiniowanymi odchyleniami biometrycznymi, badaniami okresowymi oraz historia telemetrii do celow pokazowych.
+## Quick Start
 
-Wykaz kont dostepnych w systemie:
+### Prerequisites
 
-1. Marek Marczak:
-- Rola: Kierownik
-- Identyfikator: marczak
-- Haslo: marczak2026
-- Uprawnienia: Pelny wglad w telemetrie zalogi oraz wydawanie zalecen dla astronautow
+- Python 3
+- Flask: `pip install flask`
+- Optional: `numpy` for faster autoencoder training and matrix operations
 
-2. Adam Kolosa:
-- Identyfikator: kolosa
-- Haslo: kolosa1
-- Uprawnienia: Osobisty pulpit zdrowia i zgloszenia procedur
+### Running the Application
 
-3. Michał Pawlak:
-- Identyfikator: pawlak
-- Haslo: pawlak2
-- Uprawnienia: Osobisty pulpit zdrowia i zgloszenia procedur
+1. Start the backend server:
 
-4. Krzysztof Mysior:
-- Identyfikator: mysior
-- Haslo: mysior3
-- Uprawnienia: Osobisty pulpit zdrowia i zgloszenia procedur
-
-5. Jan Hopperl:
-- Identyfikator: hopperl
-- Haslo: hopperl4
-- Uprawnienia: Osobisty pulpit zdrowia i zgloszenia procedur
-
-6. Wojciech Skrzypczak:
-- Identyfikator: skrzypczak
-- Haslo: skrzypczak5
-- Uprawnienia: Osobisty pulpit zdrowia i zgloszenia procedur
-
-## Podzial danych medycznych wedlug czestotliwosci
-
-System scisle rozroznia dwa rodzaje danych zgodnie ze specyfikacja kosmiczna:
-
-### 1. Pomiary w trybie ciaglym:
-Wskazniki transmitowane na zywo i zmieniajace sie w czasie rzeczywistym:
-- Tetno HR w jednostkach bpm
-- Interwaly RR miedzy uderzeniami serca w milisekundach
-- Zmiennosc rytmu zatokowego HRV Status RMSSD w milisekundach
-- Saturacja krwi SpO2 w procentach
-- Czestosc oddechowa w liczbie oddechow na minute
-- Poziom obciazenia i stresu w punktach od 0 do 100
-- Rezerwa metaboliczna Body Battery w punktach od 0 do 100
-- Temperatura skory w stopniach Celsjusza
-- Telemetria srodowiskowa modulu stacji ECLSS: temperatura w kabinie, cisnienie atmosferyczne, wilgotnosc wzgledna, stezenie tlenu O2, poziom dwutlenku wegla CO2 oraz stan zbiornikow wody
-
-### 2. Pomiary i badania okresowe:
-Badania wykonywane cyklicznie lub interwencyjnie. Kazde badanie posiada zarejestrowana dokladna date, godzine odczytu, sprzet pomiarowy, wynik oraz status kliniczny:
-- Cisnienie tetnicze krwi i 3-kanalowe EKG: Kamizelka Astroskin Bio-Monitor
-- Analiza czasu i faz snu oraz Sleep Score: Opaska biometryczna Actiwatch
-- Wydolnosc tlenowa VO2 max oraz test sprawnosciowy: Pulsometr wydolnosciowy Garmin
-- Sesja treningu oporowego i biegowego: Stanowisko treningowe ARED oraz bieznik T2
-- Biochemia potu: Plaster biometryczny Bio-Patch sensor mierzy kortyzol, mleczany, Na, K, Ca oraz CRP
-- Elektromiografia sEMG i dynamika ruchu: Paski sensorowe Fibre-WBAN klasyfikujace zmeczenie na 3 stany
-- Uklad nerwowy CNS: Opaska EEG neuro-sensor mierzy indeks gotowosci poznawczej i fale mozgu
-- Dozymetria radiacyjna: Dozymetr osobisty i skafandra RAD-ISS
-
-## Glowne moduly aplikacji
-
-### 1. Panel Glowny Kierownika
-Marek Marczak posiada panel zarzadzania misja:
-- Zbiorcze podsumowanie zdrowotne zalogi
-- Monitorowanie parametrow stacji kabiny ECLSS w czasie rzeczywistym
-- Karty biometryczne czlonkow zalogi z pulsujacymi pomiarami ciaglymi oraz podgladem ostatniego badania okresowego
-- Srednie wskazniki zespolowe oraz interaktywne wykresy porownawcze
-- Szybkie przejscie do pelnej telemetrii lub wydania zalecenia lekarskiego
-
-### 2. Osobiste Pulpity Astronautow
-Kazdy z pieciu astronautow ma dostep do wlasnego profilu:
-- Szczegolowy zestaw wskaznikow ciaglych
-- Tabela wynikow badan okresowych z dokladna data i godzina
-- Wykres osobisty trendu telemetrycznego z 6 dni
-- Zalecenia medyczne przekazane przez kierownika Marka Marczaka
-- Codzienny raport wykonania treningow i samopoczucia
-
-### 3. Baza Instrukcji i Profilaktyki Kosmicznej
-Zestaw procedur przeciwdzialajacych negatywnym skutkom mikrograwitacji oraz promieniowania kosmicznego:
-- Protokol codziennego treningu oporowego ARED
-- Procedura alarmu podwyzszonej aktywnosci slonecznej
-- Profilaktyka zespolu przemieszczenia plynow ustrojowych
-- Synchronizacja faz snu i cyklu oswietlenia
-- Postepowanie w chorobie adaptacji kosmicznej SAS
-
-### 4. Modul Motywacji i Dobrostanu Psychicznego
-Wsparcie psychologiczne oraz monitorowanie morale:
-- Postep misji Horyzont Jeden i licznik dni bez incydentu
-- Kamienie milowe misji
-- Oficjalne slowa wsparcia z Ziemi
-- Cwiczenie relaksacyjne regulacji oddechu
-- Praktyczne wskazowki antystresowe
-
-### 5. Dziennik Zdarzen Medycznych
-Chronologiczny wykaz decyzji medycznych, wprowadzonych odczytow i zgloszen zalogi.
-
-### 6. Ustawienia i Zarzadzanie Zaloga
-Centrum administracyjne:
-- Przelaczanie miedzy trybem rzeczywistym a trybem demonstracyjnym
-- Dodawanie nowych astronautow z wlasnymi parametrami
-- Import telemetrii biometrycznej Garmin
-
-## Uruchomienie aplikacji w srodowisku Python
-
-Aplikacja dziala jako serwer webowy na srodowisku lokalnym:
-
-Sposob 1:
-Kliknij dwukrotnie plik start-server.bat lub run-app.bat. Uruchomi to serwer Python i automatycznie otworzy przegladarke pod adresem http://localhost:5000/
-
-Sposob 2:
-Wpisz w terminalu:
+```bash
 python app.py
-i przejdz w przegladarce pod adres http://localhost:5000/
+```
 
-Sposob 3:
-Mozesz takze otworzyc bezposrednio plik index.html w dowolnej przegladarce.
+On Windows, double-click `start-server.bat` or `run-app.bat` to launch the Flask server on port `5000` and open the dashboard automatically. Set the `PORT` environment variable to override the default port.
 
-## Struktura plikow
+2. Open `http://localhost:5000/` in your browser.
 
-- app.py: Glowny serwer webowy Flask z watkiem symulacji telemetrii w tle oraz REST API
-- start-server.bat: Skrypt uruchamiajacy serwer Python i otwierajacy adres localhost
-- run-app.bat: Skrypt szybkiego uruchamiania w systemie Windows
-- assets/logo.png: Oficjalna ikona i logo systemu telemetrycznego
-- assets/favicon.png: Favicon wyswietlany na karcie przegladarki
-- index.html: Glowny szkielet aplikacji webowej
-- css/style.css: Style wizualne interfejsu inspirowane konsolami kontroli misji
-- js/data.js: Baza danych poczatkowych zalogi, telemetrii ciaglej, badan okresowych, zalecen i procedur
-- js/stream.js: Silnik transmisji i generowania telemetrii medycznej w czasie rzeczywistym
-- js/charts.js: Generator wektorowych wykresow SVG
-- js/app.js: Glowna logika aplikacji, obsluga kont, formularzy, tabel badan okresowych i filtrowania
-- test-compliance.ps1: Skrypt weryfikujacy brak emotek, dlugich myslnikow oraz nawiasow
+3. Alternatively, open `index.html` directly in a browser for standalone client-side simulation. Standalone mode uses `localStorage` and client-side simulation in `js/stream.js`; backend model scoring, NASA OSDR playback, and `/api/raport.txt` export require running `app.py`.
+
+### Retraining the Anomaly Network
+
+```bash
+python -m model.ucz_anomalie --dane dane --epoki 180
+```
+
+### Compliance Check
+
+Repository files follow formatting rules enforced by `test-compliance.ps1` - no emojis, no en-dashes or em-dashes, and no parentheses in `.html` or `.md` files:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\test-compliance.ps1
+```
+
+## Operational Modes and Accounts
+
+The application starts in `demo` mode by default with a preconfigured 6-person roster and simulated clinical deviations. Switch between `demo` and `real` mode - which keeps only the Commander account until new crew members are added - from the Settings tab or via `/api/mode`.
+
+| Name | Role | Access Level | Login | Password |
+| :--- | :--- | :--- | :--- | :--- |
+| Marek Marczak | Commander | Full fleet oversight | `marczak` | `marczak2026` |
+| Adam Kolosa | Astronaut | Personal dashboard | `kolosa` | `kolosa1` |
+| Michał Pawlak | Astronaut | Personal dashboard | `pawlak` | `pawlak2` |
+| Krzysztof Mysior | Astronaut | Personal dashboard | `mysior` | `mysior3` |
+| Jan Hopperl | Astronaut | Personal dashboard | `hopperl` | `hopperl4` |
+| Wojciech Skrzypczak | Astronaut | Personal dashboard | `skrzypczak` | `skrzypczak5` |
+
+## Application Modules
+
+- **Main Dashboard**: Commander fleet summary, real-time ECLSS cabin readouts, prioritized crew status, or personal astronaut vitals and medical orders
+- **Crew and Telemetry / My Medical Data**: Live 12-metric telemetry cards, interactive SVG time-series charts, radial gauges for bone density, muscle mass, hydration, and stress, plus periodic diagnostic test history
+- **Instructions and Prophylaxis**: Interactive step-by-step measurement procedures, overdue FIFO test queue and countdown timer, microgravity prevention guidelines, and critical emergency protocols
+- **Motivation Module**: Mission progress tracking, crew rankings, rewards, guided breathing exercises, and night/day theme switcher
+- **Event Log**: Chronological registry of medical orders issued by the Commander and daily crew check-in reports
+- **Settings**: Operational mode switching, mission reset, user and astronaut management, manual telemetry entry, and simulated Garmin profile import
+
+## Telemetry Scenarios and REST API
+
+The background stream supports four scenarios selectable in the live control bar or via API: `resting`, `training`, `eva`, and `anomaly`.
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/state` | `GET` | Returns current mode, users, astronauts, ECLSS state, crew summary, and stream config |
+| `/api/telemetry/live` | `GET` | Returns latest telemetry packet, vitals, ECLSS cabin metrics, and aggregate crew stats |
+| `/api/telemetry/control` | `POST` | Controls stream `action`: `start`, `stop`, `toggle`; `scenario`; and `interval` in seconds |
+| `/api/telemetry/entry`, `/api/pomiary` | `POST` | Submits manual astronaut vitals, ECLSS values, or raw model measurement lists |
+| `/api/model/summary` | `GET` | Returns crew and per-astronaut model snapshots; supports `?astro_id=` query parameter |
+| `/api/raport.txt` | `GET` | Downloads plain-text clinical summary report; supports `?astro_id=` query parameter |
+| `/api/garmin/import` | `POST` | Adds a simulated Garmin Health Telemetry Link astronaut profile |
+| `/api/mode` | `POST` | Switches active operational mode between `demo` and `real` |
+| `/api/mission/reset` | `POST` | Resets mission state to `demo` or `clear` |
+| `/api/astronauts` | `POST` | Creates a new astronaut or commander account |
+| `/api/astronauts/<astro_id>` | `DELETE` | Removes an account and clears its model state |
+
+## Project Structure
+
+- `app.py` - Flask web server, background telemetry worker, model integration, and REST API
+- `index.html` - Single-page web application shell
+- `css/style.css` - Mission-control stylesheet with night and day themes
+- `js/data.js` - Initial crew roster, diagnostic tests, schedules, and prophylaxis knowledge base
+- `js/stream.js` - Backend live telemetry poller and offline client-side simulator
+- `js/charts.js` - Vector SVG line charts, crew bar charts, and radial gauges
+- `js/app.js` - UI views, authentication, forms, filtering, and state management
+- `model/` - Health scoring package: `normy.py`, `baza_osobista.py`, `anomalie.py`, `odchylenia.py`, `stan.py`, `raport.py`, `ucz_anomalie.py`
+- `dane/` - Datasets and trained weights: `osdr_RR1.json`, `baza_stacji.json`, `anomalie.json`, `historia_pomiarow.csv`
+- `assets/` - Application logo and favicon in SVG and PNG formats
+- `start-server.bat`, `run-app.bat` - Windows startup scripts
+- `test-compliance.ps1` - Formatting compliance check script

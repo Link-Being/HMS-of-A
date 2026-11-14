@@ -1422,6 +1422,118 @@ const INITIAL_DATA = {
       'Krotka rozmowa z kolega z zalogi o tematach prywatnych redukuje poczucie izolacji o czterdziesci procent.',
       'Wypicie dodatkowego kubka cieplego naparu ziolowego przed snem ulatwia wejscie w faze snu glebokiego.',
       'Spojrzenie przez kopule obserwacyjna na blekit ziemskiej atmosfery wyzwala wyrzut dopaminy i endorfin.'
-    ]
-  }
+    ],
+    dailyCheckupLabels: [
+      'Pomiar EKG i tetna spoczynkowego',
+      'Odczyt saturacji SpO2',
+      'Kontrola cisnienia tetniczego',
+      'Analiza zmiennosci rytmu HRV',
+      'Odczyt kortyzolu z biopatcha',
+      'Odczyt mleczanow potreningowych',
+      'Skan gotowosci poznawczej EEG',
+      'Rejestracja jakosci i czasu snu',
+      'Weryfikacja bilansu nawodnienia',
+      'Kontrola dozymetrii EVA i raport dnia'
+    ],
+    rewardsCatalog: [
+      {
+        id: 'rew-talk-earth',
+        title: '+15 min rozmowy z Ziemia',
+        cost: 3000,
+        category: 'Lacznosc prywatna',
+        description: 'Dodatkowe dedykowane pasmo wideo z rodzina bez limitu telemetrii.'
+      },
+      {
+        id: 'rew-video-family',
+        title: 'Priorytetowe polaczenie wideo HD',
+        cost: 2200,
+        category: 'Lacznosc prywatna',
+        description: 'Rezerwacja szyfrowanego kanalu laczności poza harmonogramem zmiany.'
+      },
+      {
+        id: 'rew-cupola',
+        title: 'Dodatkowy czas w kopule Cupola',
+        cost: 1500,
+        category: 'Regeneracja',
+        description: 'Trzydziesci minut prywatnej sesji obserwacyjnej Ziemi po zmianie.'
+      },
+      {
+        id: 'rew-protocol-skip',
+        title: 'Uproszczony raport porzadkowy',
+        cost: 1200,
+        category: 'Komfort pracy',
+        description: 'Przekazanie rutynowego przegladu logow stacji na kolejna wachte.'
+      },
+      {
+        id: 'rew-menu',
+        title: 'Wybor specjalnego menu kolacyjnego',
+        cost: 900,
+        category: 'Dobrostan',
+        description: 'Pierwszenstwo wyboru zestawu posilkow z zapasow misji na weekend.'
+      }
+    ],
+    crewProfiles: {
+      'astro-1': {
+        completedIndices: [0, 1, 2, 3, 4, 5, 6, 7],
+        points: 2480,
+        streakDays: 14,
+        punctualityPct: 96,
+        windowStart: 7,
+        history7d: [92, 95, 89, 94, 96, 98, 98],
+        history30d: [88, 91, 93, 96],
+        trend7d: '+4.2%',
+        trend30d: '+5.1%',
+        redeemed: []
+      },
+      'astro-2': {
+        completedIndices: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+        points: 2790,
+        streakDays: 18,
+        punctualityPct: 98,
+        windowStart: 6,
+        history7d: [94, 96, 97, 95, 98, 99, 98],
+        history30d: [92, 94, 96, 97],
+        trend7d: '+3.8%',
+        trend30d: '+4.6%',
+        redeemed: []
+      },
+      'astro-3': {
+        completedIndices: [0, 1, 2, 3, 4, 5, 6],
+        points: 2140,
+        streakDays: 9,
+        punctualityPct: 89,
+        windowStart: 8,
+        history7d: [84, 81, 78, 76, 72, 68, 52],
+        history30d: [85, 80, 74, 65],
+        trend7d: '-3.4%',
+        trend30d: '-4.8%',
+        redeemed: []
+      },
+      'astro-4': {
+        completedIndices: [0, 1, 2, 3, 4],
+        points: 1620,
+        streakDays: 4,
+        punctualityPct: 78,
+        windowStart: 9,
+        history7d: [74, 68, 62, 55, 48, 39, 23],
+        history30d: [76, 66, 54, 41],
+        trend7d: '-7.2%',
+        trend30d: '-9.5%',
+        redeemed: []
+      },
+      'astro-5': {
+        completedIndices: [0, 1, 2, 3, 4, 5, 6, 7],
+        points: 2560,
+        streakDays: 15,
+        punctualityPct: 95,
+        windowStart: 7,
+        history7d: [91, 93, 94, 96, 95, 97, 98],
+        history30d: [89, 92, 94, 96],
+        trend7d: '+3.5%',
+        trend30d: '+4.0%',
+        redeemed: []
+      }
+    }
+  },
+  themeMode: 'night'
 };

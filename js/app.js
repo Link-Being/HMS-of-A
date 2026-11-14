@@ -148,6 +148,16 @@
   let activeChartMetric = 'hr';
   let filterCategory = 'all';
   let searchQuery = '';
+  let motivationSubTab = 'pulpit';
+  let motivationPeriod = '7d';
+
+  function applyThemeMode(mode) {
+    const resolved = mode === 'day' ? 'day' : 'night';
+    appState.themeMode = resolved;
+    if (document.body) {
+      document.body.classList.toggle('theme-day', resolved === 'day');
+    }
+  }
 
   // Stan licznika cwiczen oddechowych
   let breathingInterval = null;
@@ -307,38 +317,6 @@
 
   // WIDOK 0: Panel logowania
   function renderLoginPanel(container) {
-    let demoCardsHtml = '';
-    DEMO_USERS.forEach(function(u) {
-      const isLeader = u.id === 'kierownik';
-      demoCardsHtml += `
-        <div class="demo-acc-card">
-          <div class="demo-acc-head">
-            <div class="demo-acc-avatar">${u.avatarCode}</div>
-            <div class="demo-acc-info">
-              <div class="demo-acc-name">${u.name}</div>
-              ${u.role ? `<div class="demo-acc-role">${u.role}</div>` : ''}
-            </div>
-            <span class="badge-tag ${isLeader ? 'badge-supervisor' : ''}">${u.accessLevel}</span>
-          </div>
-
-          <div class="demo-acc-creds">
-            <div class="cred-item">
-              <span class="cred-label">LOGIN:</span>
-              <span class="cred-value">${u.login}</span>
-            </div>
-            <div class="cred-item">
-              <span class="cred-label">HASLO:</span>
-              <span class="cred-value">${u.password}</span>
-            </div>
-          </div>
-
-          <button type="button" class="btn btn-outline btn-sm btn-fill-demo" data-login="${u.login}" data-pass="${u.password}">
-            Wypelnij formularz tym kontem
-          </button>
-        </div>
-      `;
-    });
-
     container.innerHTML = `
       <div class="login-wrapper">
         <div class="login-card">
@@ -369,39 +347,8 @@
             </button>
           </form>
         </div>
-
-        <div class="demo-accounts-container">
-          <div class="demo-accounts-header">
-            <div class="demo-accounts-title">Wykaz przykladowych kont dostepowych</div>
-            <div class="demo-accounts-subtitle">
-              Wybierz profil z ponizszej listy lub kliknij przycisk obok konta aby automatycznie wprowadzic dane
-            </div>
-          </div>
-
-          <div class="demo-accounts-grid">
-            ${demoCardsHtml}
-          </div>
-        </div>
       </div>
     `;
-
-    // Nasluch przyciskow automatycznego wypelniania kont
-    container.querySelectorAll('.btn-fill-demo').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const loginVal = btn.getAttribute('data-login');
-        const passVal = btn.getAttribute('data-pass');
-        const inputLogin = document.getElementById('input-login');
-        const inputPass = document.getElementById('input-password');
-        if (inputLogin && inputPass) {
-          inputLogin.value = loginVal;
-          inputPass.value = passVal;
-          const errBox = document.getElementById('login-error-msg');
-          if (errBox) errBox.style.display = 'none';
-          inputLogin.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          inputLogin.focus();
-        }
-      });
-    });
 
     // Nasluch formularza logowania
     const form = document.getElementById('login-form');
@@ -2582,68 +2529,287 @@
   }
 
 
-  // WIDOK 4: Modul Motywacji
-  function renderMotywacja() {
-    const mainEl = document.getElementById('app-main');
+  // Pomocnicze funkcje przebudowanego Modulu Motywacji
+  function ensureMotivationState() {
+    const defMot = INITIAL_DATA.motivation;
+    if (!appState.motivation) {
+      appState.motivation = JSON.parse(JSON.stringify(defMot));
+    }
     const mot = appState.motivation;
+    if (!Array.isArray(mot.dailyCheckupLabels) || mot.dailyCheckupLabels.length === 0) {
+      mot.dailyCheckupLabels = defMot.dailyCheckupLabels.slice();
+    }
+    if (!Array.isArray(mot.rewardsCatalog) || mot.rewardsCatalog.length === 0) {
+      mot.rewardsCatalog = JSON.parse(JSON.stringify(defMot.rewardsCatalog));
+    }
+    if (!mot.crewProfiles || typeof mot.crewProfiles !== 'object') {
+      mot.crewProfiles = JSON.parse(JSON.stringify(defMot.crewProfiles));
+    }
+    if (!Array.isArray(mot.teamMilestones)) {
+      mot.teamMilestones = JSON.parse(JSON.stringify(defMot.teamMilestones));
+    }
+    if (!Array.isArray(mot.quotes)) {
+      mot.quotes = JSON.parse(JSON.stringify(defMot.quotes));
+    }
+    if (!Array.isArray(mot.dailyTips)) {
+      mot.dailyTips = defMot.dailyTips.slice();
+    }
+    return mot;
+  }
 
-    let milestonesHtml = '';
-    mot.teamMilestones.forEach(function(m) {
-      milestonesHtml += `
-        <div class="milestone-item ${m.achieved ? 'milestone-achieved' : 'milestone-pending'}">
-          <div class="milestone-icon-wrap">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              ${m.achieved ? '<circle cx="10" cy="10" r="8" fill="#10b981"/><path d="M6 10 L9 13 L14 7" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' : '<circle cx="10" cy="10" r="8" stroke="#88a0b8" stroke-width="2" stroke-dasharray="3,3"/>'}
-            </svg>
+  function getAstroMotivationProfile(astro) {
+    const mot = ensureMotivationState();
+    const id = astro ? astro.id : 'default';
+    if (!mot.crewProfiles[id]) {
+      const defProfile = INITIAL_DATA.motivation.crewProfiles[id];
+      if (defProfile) {
+        mot.crewProfiles[id] = JSON.parse(JSON.stringify(defProfile));
+      } else {
+        const modelIdx = astro && astro.modelSummary && astro.modelSummary.ogolny && typeof astro.modelSummary.ogolny.indeks === 'number'
+          ? Math.round(astro.modelSummary.ogolny.indeks)
+          : 92;
+        mot.crewProfiles[id] = {
+          completedIndices: [0, 1, 2, 3, 4, 5, 6],
+          points: 2100,
+          streakDays: 7,
+          punctualityPct: 92,
+          windowStart: 7,
+          history7d: [90, 91, 89, 93, 94, 92, modelIdx],
+          history30d: [88, 90, 91, modelIdx],
+          trend7d: '+2.4%',
+          trend30d: '+3.1%',
+          redeemed: []
+        };
+      }
+    }
+    const prof = mot.crewProfiles[id];
+    if (astro && astro.modelSummary && astro.modelSummary.ogolny && typeof astro.modelSummary.ogolny.indeks === 'number') {
+      const liveIdx = Math.max(0, Math.min(100, Math.round(astro.modelSummary.ogolny.indeks)));
+      prof.history7d[prof.history7d.length - 1] = liveIdx;
+    }
+    if (!Array.isArray(prof.redeemed)) prof.redeemed = [];
+    if (!Array.isArray(prof.completedIndices)) prof.completedIndices = [];
+    return prof;
+  }
+
+  function formatWindowRange(startHour) {
+    const s = Math.max(5, Math.min(21, parseInt(startHour, 10) || 7));
+    const e = (s + 3) % 24;
+    const pad = function(n) { return String(n).padStart(2, '0') + ':00'; };
+    return pad(s) + ' - ' + pad(e);
+  }
+
+  function formatPoints(val) {
+    const num = Math.max(0, Math.round(Number(val) || 0));
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  }
+
+  function renderAstronautSilhouetteSvg() {
+    return `
+      <svg width="78" height="78" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <circle cx="32" cy="17" r="10" fill="currentColor" opacity="0.92"/>
+        <rect x="26" y="13" width="12" height="7" rx="3.5" fill="#060b13" opacity="0.65"/>
+        <path d="M18 32 C18 28 22 27 32 27 C42 27 46 28 46 32 L49 44 C50 47 46 49 44 46 L41 37 L41 56 C41 59 37 59 36 56 L34 45 L30 45 L28 56 C27 59 23 59 23 56 L23 37 L20 46 C18 49 14 47 15 44 Z" fill="currentColor" opacity="0.92"/>
+        <rect x="28" y="32" width="8" height="5" rx="1.5" fill="#060b13" opacity="0.55"/>
+      </svg>
+    `;
+  }
+
+  function getAstronautVisualStatus(astro) {
+    const status = astro && astro.overallStatus ? astro.overallStatus : 'normal';
+    const idx = astro && astro.modelSummary && astro.modelSummary.ogolny && typeof astro.modelSummary.ogolny.indeks === 'number'
+      ? Math.round(astro.modelSummary.ogolny.indeks)
+      : null;
+    if (status === 'critical') {
+      return {
+        cls: 'status-critical',
+        dotColor: '#ef4444',
+        title: 'Zle wyniki badan',
+        subtitle: 'Wykryto istotne odchylenia : zalecany kontakt z lekarzem i kierownikiem',
+        indexLabel: idx !== null ? 'Indeks modelu: ' + idx + '/100' : 'Analiza krytyczna'
+      };
+    }
+    if (status === 'warning') {
+      return {
+        cls: 'status-warning',
+        dotColor: '#f59e0b',
+        title: 'Pojedyncze wyniki poza norma',
+        subtitle: 'Lekkie odchylenia parametrow : zalecana kontrola i regeneracja',
+        indexLabel: idx !== null ? 'Indeks modelu: ' + idx + '/100' : 'Wymagana obserwacja'
+      };
+    }
+    return {
+      cls: 'status-normal',
+      dotColor: '#10b981',
+      title: 'Wszystko w normie',
+      subtitle: 'Parametry stabilne : pelna zgodnosc z profilem bazowym',
+      indexLabel: idx !== null ? 'Indeks modelu: ' + idx + '/100' : 'Stan stabilny'
+    };
+  }
+
+  function renderMotywacjaPulpitHtml(mot, astro, prof) {
+    const labels = mot.dailyCheckupLabels;
+    const totalChecks = labels.length;
+    const doneCount = prof.completedIndices.length;
+    const readinessPct = Math.min(100, Math.round((doneCount / totalChecks) * 100));
+    const isFull = readinessPct >= 100;
+    const visStatus = getAstronautVisualStatus(astro);
+
+    const streakBonusPerTask = 100 + prof.streakDays * 5;
+    const tasksHtml = labels.map(function(lbl, idx) {
+      const done = prof.completedIndices.indexOf(idx) !== -1;
+      return `
+        <button type="button" class="vitalis-task-item ${done ? 'done' : ''}" data-task-idx="${idx}">
+          <span>${lbl}</span>
+          <span class="vitalis-task-dot">${done ? 'V' : ''}</span>
+        </button>
+      `;
+    }).join('');
+
+    const is7d = motivationPeriod !== '30d';
+    const barsData = is7d ? prof.history7d : prof.history30d;
+    const barLabels = is7d
+      ? ['Pon', 'Wt', 'Sr', 'Czw', 'Pt', 'Sob', 'Nie']
+      : ['Tydz 1', 'Tydz 2', 'Tydz 3', 'Tydz 4'];
+    const avgStability = barsData.length > 0
+      ? Math.round(barsData.reduce(function(acc, v) { return acc + v; }, 0) / barsData.length)
+      : 90;
+    const trendStr = is7d ? prof.trend7d : prof.trend30d;
+    const trendIsUp = String(trendStr).indexOf('-') === -1;
+
+    const barsHtml = barsData.map(function(val, i) {
+      const clampVal = Math.max(12, Math.min(100, Math.round(val)));
+      const barCls = clampVal < 45 ? 'bar-crit' : (clampVal < 75 ? 'bar-warn' : '');
+      const lbl = barLabels[i] || ('D' + (i + 1));
+      return `
+        <div class="vitalis-bar-col" title="${lbl}: ${clampVal}%">
+          <div class="vitalis-bar-track">
+            <div class="vitalis-bar-fill ${barCls}" style="height: ${clampVal}%;"></div>
           </div>
-          <div class="milestone-content">
-            <div class="milestone-title-row">
-              <span class="milestone-title">${m.title}</span>
-              <span class="milestone-date">${m.date}</span>
+          <span class="vitalis-bar-lbl">${lbl}</span>
+        </div>
+      `;
+    }).join('');
+
+    const nextReward = mot.rewardsCatalog
+      .slice()
+      .sort(function(a, b) { return a.cost - b.cost; })
+      .find(function(r) { return r.cost > prof.points; }) || mot.rewardsCatalog[0];
+    const pointsMissing = nextReward ? Math.max(0, nextReward.cost - prof.points) : 0;
+    const rewardPct = nextReward ? Math.min(100, Math.round((prof.points / nextReward.cost) * 100)) : 100;
+
+    return `
+      <div class="vitalis-hero-grid">
+        <div class="vitalis-card vitalis-readiness-card">
+          <div>
+            <div class="vitalis-readiness-head">
+              <div>
+                <div class="vitalis-card-eyebrow">Gotowosc na dzis</div>
+                <div class="vitalis-readiness-pct">${readinessPct} %</div>
+                <div class="vitalis-readiness-meta">
+                  <span>${isFull ? 'Pelna gotowosc do dzialania : wszystkie badania dzis ukonczone' : doneCount + ' z ' + totalChecks + ' badan ukonczonych : +10% za kazde badanie'}</span>
+                </div>
+              </div>
+              <div class="vitalis-readiness-badge" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
             </div>
-            <p class="milestone-desc">${m.description}</p>
+
+            <div class="vitalis-track" style="margin: 14px 0 10px 0;">
+              <div class="vitalis-fill-emerald" style="width: ${readinessPct}%;"></div>
+            </div>
+
+            <div class="vitalis-readiness-meta">
+              <span>Okno pomiarowe: ${formatWindowRange(prof.windowStart)}</span>
+              <span>Premia za badanie: +${streakBonusPerTask} pkt</span>
+            </div>
+          </div>
+
+          <div class="vitalis-readiness-actions">
+            ${isFull
+              ? '<span class="badge-tag badge-normal">100% Gotowosci operacyjnej</span>'
+              : '<button type="button" id="btn-vitalis-complete-next" class="btn btn-primary">Kontynuuj badania +10%</button>'}
+            <button type="button" class="btn btn-outline btn-sm" data-vitalis-jump="ustawienia">Zmien okno 3h</button>
+          </div>
+
+          <div class="vitalis-tasks-grid">
+            ${tasksHtml}
           </div>
         </div>
-      `;
-    });
 
-    let quotesHtml = '';
-    mot.quotes.forEach(function(q) {
-      quotesHtml += `
-        <div class="quote-card">
-          <p class="quote-text">"${q.text}"</p>
-          <div class="quote-author">${q.author}</div>
+        <div class="vitalis-card vitalis-silhouette-card">
+          <div class="vitalis-card-eyebrow">Stan organizmu wedlug modelu</div>
+          <div class="vitalis-aura ${visStatus.cls}">
+            ${renderAstronautSilhouetteSvg()}
+          </div>
+          <div class="vitalis-status-title">
+            <span class="vitalis-status-dot" style="background: ${visStatus.dotColor};"></span>
+            <span>${visStatus.title}</span>
+          </div>
+          <div class="vitalis-status-sub">${visStatus.subtitle}</div>
+          <div class="badge-tag">${visStatus.indexLabel}</div>
         </div>
-      `;
-    });
-
-    const progressPercent = Math.round((mot.missionDay / mot.totalPlannedDays) * 100);
-
-    mainEl.innerHTML = `
-      <div class="view-header">
-        <div>
-          <h1 class="view-title">Modul Motywacji i Dobrostanu Psychicznego</h1>
-          <p class="view-subtitle">Wsparcie odpornosci psychicznej, cele misji oraz techniki redukcji stresu w warunkach izolacji orbitalnej</p>
-        </div>
-        <div class="role-indicator-badge">Modul dostepny dla wszystkich</div>
       </div>
 
-      <div class="mission-progress-banner">
-        <div class="progress-info-col">
-          <span class="banner-sub-label">Postep misji orbitalnej:</span>
-          <h2 class="banner-main-title">${mot.missionName}</h2>
-          <div class="progress-bar-track">
-            <div class="progress-bar-fill" style="width: ${progressPercent}%;"></div>
+      <div class="vitalis-mid-grid">
+        <div class="vitalis-card">
+          <div class="vitalis-stability-head">
+            <div>
+              <div class="vitalis-card-eyebrow">Czas w normie</div>
+              <h3 style="margin-top: 4px; font-size: 18px;">Stabilnosc parametrow</h3>
+            </div>
+            <div class="vitalis-period-switch">
+              <button type="button" class="vitalis-period-btn ${is7d ? 'active' : ''}" data-vitalis-period="7d">7 dni</button>
+              <button type="button" class="vitalis-period-btn ${!is7d ? 'active' : ''}" data-vitalis-period="30d">30 dni</button>
+            </div>
           </div>
-          <div class="progress-labels-row">
-            <span>Dzien ${mot.missionDay}</span>
-            <span>Plan: ${mot.totalPlannedDays} dni</span>
+
+          <div class="vitalis-stability-metric-row">
+            <span class="vitalis-stability-val">${avgStability}%</span>
+            <span class="vitalis-trend-pill ${trendIsUp ? 'vitalis-trend-up' : 'vitalis-trend-down'}">
+              ${trendIsUp ? 'Wzrost ' : 'Zmiana '}${trendStr}
+            </span>
+          </div>
+
+          <div class="vitalis-bars-grid ${is7d ? '' : 'bars-4'}">
+            ${barsHtml}
           </div>
         </div>
-        <div class="safe-days-col">
-          <span class="safe-days-count">${mot.safeDaysWithoutIncident}</span>
-          <span class="safe-days-title">Dni bez incydentu</span>
-          <span class="safe-days-sub">Wzorowa dyscyplina zalogi</span>
+
+        <div class="vitalis-card vitalis-points-card">
+          <div class="vitalis-points-row">
+            <div>
+              <div class="vitalis-card-eyebrow">Punkty misji</div>
+              <div class="vitalis-points-big">${formatPoints(prof.points)} <span class="vitalis-points-unit">pkt</span></div>
+            </div>
+            <div class="vitalis-medal-badge" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="9" r="6"></circle>
+                <path d="M9 14.5 L8 22 L12 19.5 L16 22 L15 14.5"></path>
+              </svg>
+            </div>
+          </div>
+
+          <div>
+            <div class="vitalis-readiness-meta" style="margin-bottom: 8px;">
+              <span>Nastepna nagroda: ${nextReward ? nextReward.title : 'Maksymalny poziom'}</span>
+              <span style="color: #fbbf24; font-weight: 700;">${pointsMissing > 0 ? 'Brakuje ' + formatPoints(pointsMissing) + ' pkt' : 'Dostepna do odbioru'}</span>
+            </div>
+            <div class="vitalis-track">
+              <div class="vitalis-fill-amber" style="width: ${rewardPct}%;"></div>
+            </div>
+          </div>
+
+          <div class="vitalis-readiness-meta">
+            <span>Seria punktualnosci: ${prof.streakDays} dni z rzedu</span>
+            <span>Punktualnosc: ${prof.punctualityPct}%</span>
+          </div>
+
+          <button type="button" class="btn btn-outline btn-block" data-vitalis-jump="nagrody">
+            Przejdz do katalogu nagrod
+          </button>
         </div>
       </div>
 
@@ -2651,21 +2817,28 @@
         <div class="split-column-main">
           <div class="card-section">
             <div class="section-title-bar">
-              <h2>Osiagniecia i kamienie milowe zespolu</h2>
-              <span class="badge-tag">Cele misji</span>
+              <h2>Postep misji i wsparcie zespolowe</h2>
+              <span class="badge-tag">Dzien ${mot.missionDay} z ${mot.totalPlannedDays}</span>
             </div>
             <div class="milestones-list">
-              ${milestonesHtml}
-            </div>
-          </div>
-
-          <div class="card-section">
-            <div class="section-title-bar">
-              <h2>Komunikaty wsparcia z Ziemi</h2>
-              <span class="badge-tag">Lacznosc telemedyczna</span>
-            </div>
-            <div class="quotes-grid">
-              ${quotesHtml}
+              ${mot.teamMilestones.map(function(m) {
+                return `
+                  <div class="milestone-item ${m.achieved ? 'milestone-achieved' : 'milestone-pending'}">
+                    <div class="milestone-icon-wrap">
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        ${m.achieved ? '<circle cx="10" cy="10" r="8" fill="#10b981"/><path d="M6 10 L9 13 L14 7" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' : '<circle cx="10" cy="10" r="8" stroke="#88a0b8" stroke-width="2" stroke-dasharray="3,3"/>'}
+                      </svg>
+                    </div>
+                    <div class="milestone-content">
+                      <div class="milestone-title-row">
+                        <span class="milestone-title">${m.title}</span>
+                        <span class="milestone-date">${m.date}</span>
+                      </div>
+                      <p class="milestone-desc">${m.description}</p>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
             </div>
           </div>
         </div>
@@ -2673,8 +2846,7 @@
         <div class="split-column-side">
           <div class="side-panel-card breathing-card">
             <h3>Technika Relaksacji Oddechowej</h3>
-            <p class="panel-intro-text">Metoda regulacji ukladu autonomicznego i redukcji kortyzolu:</p>
-
+            <p class="panel-intro-text">Regulacja ukladu autonomicznego i obnizanie kortyzolu:</p>
             <div class="breathing-display-box">
               <div class="breathing-circle-outer" id="breath-circle">
                 <div class="breathing-circle-inner">
@@ -2686,11 +2858,8 @@
                 Nacisnij przycisk ponizej aby rozpoczac sesje
               </div>
             </div>
-
             <div class="breathing-controls">
-              <button id="btn-toggle-breath" class="btn btn-primary btn-block">
-                Rozpocznij cwiczenie
-              </button>
+              <button type="button" id="btn-toggle-breath" class="btn btn-primary btn-block">Rozpocznij cwiczenie</button>
             </div>
           </div>
 
@@ -2699,13 +2868,486 @@
             <div class="daily-tip-box" id="daily-tip-box">
               <p id="tip-text" class="tip-text">${mot.dailyTips[0]}</p>
             </div>
-            <button id="btn-next-tip" class="btn btn-outline btn-block mt-2">
-              Kolejna wskazowka
+            <button type="button" id="btn-next-tip" class="btn btn-outline btn-block mt-2">Kolejna wskazowka</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderMotywacjaZdrowieHtml(astro) {
+    const eclss = appState.eclssCabin || { temp: 24.1, pressure: 101.3, humidity: 39, co2: 2641 };
+    const v = astro && astro.vitals ? astro.vitals : {};
+    const avg30 = function(cur, drift) {
+      const n = Number(cur);
+      return Number.isFinite(n) ? (n + drift).toFixed(1) : '-';
+    };
+    const rows = [
+      {
+        name: 'Temperatura w kabinie',
+        source: 'ECLSS OSDR',
+        cur: eclss.temp + ' st. C',
+        avg: avg30(eclss.temp, -0.3) + ' st. C',
+        norm: '21.0 - 25.5 st. C',
+        ok: Number(eclss.temp) >= 21.0 && Number(eclss.temp) <= 25.5
+      },
+      {
+        name: 'Cisnienie powietrza',
+        source: 'ECLSS',
+        cur: eclss.pressure + ' kPa',
+        avg: avg30(eclss.pressure, -0.1) + ' kPa',
+        norm: 'Norma ok. 101.3 kPa',
+        ok: Number(eclss.pressure) >= 99.0 && Number(eclss.pressure) <= 103.0
+      },
+      {
+        name: 'Wilgotnosc wzgledna',
+        source: 'ECLSS OSDR',
+        cur: eclss.humidity + '%',
+        avg: Math.round(Number(eclss.humidity || 39) + 2) + '%',
+        norm: 'Kontrolowana: 30 - 60%',
+        ok: Number(eclss.humidity) >= 30 && Number(eclss.humidity) <= 60
+      },
+      {
+        name: 'Stezenie CO2 w kabinie',
+        source: 'ECLSS OSDR',
+        cur: eclss.co2 + ' ppm',
+        avg: Math.round(Number(eclss.co2 || 2641) - 110) + ' ppm',
+        norm: 'Limit operacyjny ponizej 3000 ppm',
+        ok: Number(eclss.co2) < 3000
+      },
+      {
+        name: 'Tetno spoczynkowe',
+        source: 'Biometria Garmin',
+        cur: (v.hr || 68) + ' bpm',
+        avg: Math.round(Number(v.hr || 68) - 2) + ' bpm',
+        norm: 'Norma: 50 - 90 bpm',
+        ok: Number(v.hr) >= 50 && Number(v.hr) <= 90
+      },
+      {
+        name: 'Saturacja SpO2',
+        source: 'Pulsoksymetr',
+        cur: (v.spo2 || 98) + '%',
+        avg: Math.min(100, Number(v.spo2 || 98) + 0.4).toFixed(1) + '%',
+        norm: 'Norma: 95 - 100%',
+        ok: Number(v.spo2) >= 95
+      },
+      {
+        name: 'Kortyzol w pocie',
+        source: 'Biopatch',
+        cur: (v.cortisol || 4.2) + ' ng/ml',
+        avg: avg30(v.cortisol || 4.2, -0.4) + ' ng/ml',
+        norm: 'Norma: ponizej 10 ng/ml',
+        ok: Number(v.cortisol || 4.2) < 10.0
+      },
+      {
+        name: 'Gotowosc poznawcza EEG',
+        source: 'Czujnik EEG',
+        cur: (v.cognitiveReadiness || 90) + '%',
+        avg: Math.min(100, Math.round(Number(v.cognitiveReadiness || 90) + 3)) + '%',
+        norm: 'Norma: 75 - 100%',
+        ok: Number(v.cognitiveReadiness || 90) >= 75
+      }
+    ];
+
+    const cardsHtml = rows.map(function(r) {
+      return `
+        <div class="vitalis-health-card">
+          <div class="vitalis-health-top">
+            <div>
+              <div style="font-weight: 700; font-size: 14px;">${r.name}</div>
+              <div style="font-size: 11px; color: var(--text-muted);">${r.source}</div>
+            </div>
+            <span class="badge-tag ${r.ok ? 'badge-normal' : 'badge-warning'}">${r.ok ? 'W normie' : 'Poza norma'}</span>
+          </div>
+          <div class="vitalis-health-val">${r.cur}</div>
+          <div class="vitalis-health-avg">Srednia 30 dni: ${r.avg}</div>
+          <div style="font-size: 12px; color: var(--text-secondary);">${r.norm}</div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="card-section">
+        <div class="section-title-bar">
+          <div>
+            <h2>Aktualne dane zdrowia i kabiny ze srednia 30 dni</h2>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">
+              Zestawienie biezacych wynikow biometrycznych oraz srodowiska ECLSS porownane z norma i srednia z ostatnich 30 dni
+            </p>
+          </div>
+          <span class="badge-tag badge-normal">Systemy online</span>
+        </div>
+        <div class="vitalis-health-grid">
+          ${cardsHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderMotywacjaNagrodyHtml(mot, prof) {
+    const cardsHtml = mot.rewardsCatalog.map(function(rew) {
+      const canBuy = prof.points >= rew.cost;
+      const missing = Math.max(0, rew.cost - prof.points);
+      const pct = Math.min(100, Math.round((prof.points / rew.cost) * 100));
+      return `
+        <div class="vitalis-reward-card ${canBuy ? 'available' : ''}">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <span class="badge-tag">${rew.category}</span>
+              <span class="vitalis-reward-cost">${formatPoints(rew.cost)} pkt</span>
+            </div>
+            <h3 style="font-size: 16px; margin-bottom: 6px;">${rew.title}</h3>
+            <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.4;">${rew.description}</p>
+          </div>
+          <div>
+            <div class="vitalis-track" style="margin-bottom: 8px;">
+              <div class="vitalis-fill-amber" style="width: ${pct}%;"></div>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 10px;">
+              ${canBuy ? 'Mozesz odebrac bonus natychmiast' : formatPoints(missing) + ' pkt do odblokowania'}
+            </div>
+            ${canBuy
+              ? '<button type="button" class="btn btn-primary btn-block btn-redeem-reward" data-reward-id="' + rew.id + '">Wymien za ' + formatPoints(rew.cost) + ' pkt</button>'
+              : '<button type="button" class="btn btn-outline btn-block" disabled>Jeszcze niedostepna</button>'}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const redeemedHtml = prof.redeemed.length > 0
+      ? prof.redeemed.map(function(item) {
+          return '<div class="milestone-item milestone-achieved"><div class="milestone-content"><div class="milestone-title-row"><span class="milestone-title">' + item.title + '</span><span class="milestone-date">' + item.date + '</span></div><p class="milestone-desc">Wykorzystano ' + formatPoints(item.cost) + ' pkt misji</p></div></div>';
+        }).join('')
+      : '<p style="font-size: 13px; color: var(--text-muted);">Brak odebranych bonusow w bieżącej sesji.</p>';
+
+    return `
+      <div class="vitalis-balance-banner">
+        <div>
+          <div class="vitalis-card-eyebrow">Saldo punktow misji</div>
+          <div class="vitalis-points-big" style="margin-top: 6px;">${formatPoints(prof.points)} <span class="vitalis-points-unit">pkt</span></div>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-top: 8px; max-width: 620px;">
+            Za punktualnosc i regularnosc w wykonywaniu badan przyznawane sa punkty. Przy nieprzerwanej serii dostaje sie wiecej punktow. Mozna je wymienic na dodatkowe bonusy.
+          </p>
+        </div>
+        <div class="safe-days-col">
+          <span class="safe-days-count" style="color: #fbbf24;">${prof.streakDays}</span>
+          <span class="safe-days-title">Dni nieprzerwanej serii</span>
+          <span class="safe-days-sub">Premia: +${100 + prof.streakDays * 5} pkt za badanie</span>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title-bar">
+          <h2>Dostepne nagrody i bonusy misji</h2>
+          <span class="badge-tag">System motywacyjny</span>
+        </div>
+        <div class="vitalis-rewards-grid">
+          ${cardsHtml}
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title-bar">
+          <h2>Odebrane bonusy</h2>
+          <span class="badge-tag">${prof.redeemed.length} szt.</span>
+        </div>
+        <div class="milestones-list">
+          ${redeemedHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderMotywacjaRankingHtml(mot, currentAstro) {
+    const entries = appState.astronauts.map(function(a) {
+      const p = getAstroMotivationProfile(a);
+      const readiness = Math.min(100, Math.round((p.completedIndices.length / mot.dailyCheckupLabels.length) * 100));
+      const modelIdx = a.modelSummary && a.modelSummary.ogolny && typeof a.modelSummary.ogolny.indeks === 'number'
+        ? Math.round(a.modelSummary.ogolny.indeks)
+        : 90;
+      return {
+        astro: a,
+        profile: p,
+        readiness: readiness,
+        modelIdx: modelIdx
+      };
+    });
+
+    entries.sort(function(a, b) {
+      return b.profile.points - a.profile.points;
+    });
+
+    const rowsHtml = entries.length > 0
+      ? entries.map(function(item, idx) {
+          const isMe = currentAstro && item.astro.id === currentAstro.id;
+          return `
+            <div class="vitalis-rank-row ${isMe ? 'rank-current' : ''}">
+              <div style="display: flex; align-items: center; gap: 14px;">
+                <span class="vitalis-rank-num">#${idx + 1}</span>
+                <div>
+                  <div style="font-weight: 700; font-size: 15px;">${item.astro.name}</div>
+                  <div style="font-size: 12px; color: var(--text-secondary);">
+                    Seria: ${item.profile.streakDays} dni | Punktualnosc: ${item.profile.punctualityPct}% | Gotowosc dzis: ${item.readiness}%
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <span class="badge-tag">Model: ${item.modelIdx}/100</span>
+                <span style="font-family: var(--font-mono); font-weight: 800; font-size: 16px; color: #fbbf24;">${formatPoints(item.profile.points)} pkt</span>
+              </div>
+            </div>
+          `;
+        }).join('')
+      : '<p style="font-size: 13px; color: var(--text-muted);">Brak aktywnych astronautow w rankingu misji.</p>';
+
+    return `
+      <div class="card-section">
+        <div class="section-title-bar">
+          <div>
+            <h2>Ranking punktualnosci i punktow zalogi</h2>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">
+              Zestawienie punktow zdobytych za regularne pomiary w wyznaczonym 3-godzinnym oknie oraz utrzymanie serii
+            </p>
+          </div>
+          <span class="badge-tag">${entries.length} czlonkow zalogi</span>
+        </div>
+        <div class="vitalis-ranking-list">
+          ${rowsHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderMotywacjaUstawieniaHtml(prof, astro) {
+    const startHours = [6, 7, 8, 9, 11, 14, 17, 19];
+    const currentWin = parseInt(prof.windowStart, 10) || 7;
+    const theme = appState.themeMode === 'day' ? 'day' : 'night';
+
+    const winBtnsHtml = startHours.map(function(h) {
+      const active = h === currentWin;
+      return `
+        <button type="button" class="vitalis-window-btn ${active ? 'active' : ''}" data-window-start="${h}">
+          ${formatWindowRange(h)}
+        </button>
+      `;
+    }).join('');
+
+    return `
+      <div class="vitalis-settings-grid">
+        <div class="vitalis-card">
+          <div class="vitalis-card-eyebrow">Harmonogram badan</div>
+          <h2 style="font-size: 18px; margin-top: 4px;">Elastyczne 3-godzinne okno pomiarow</h2>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;">
+            Zamiast sztywnej godziny wykonania pomiaru wybierz 3-godzinne okno dopasowane do planu wachty astronauty ${astro ? astro.name : ''}. Wykonanie badan w tym oknie podtrzymuje serie punktualnosci.
+          </p>
+          <div style="margin-top: 14px; font-size: 13px;">
+            Aktywne okno: <strong style="color: var(--primary-cyan); font-family: var(--font-mono);">${formatWindowRange(currentWin)}</strong>
+          </div>
+          <div class="vitalis-window-grid">
+            ${winBtnsHtml}
+          </div>
+        </div>
+
+        <div class="vitalis-card">
+          <div class="vitalis-card-eyebrow">Komfort wizualny</div>
+          <h2 style="font-size: 18px; margin-top: 4px;">Tryb dzienny i nocny aplikacji</h2>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;">
+            Przelacz tryb kolorystyczny interfejsu w zaleznosci od oswietlenia w module stacji. Tryb nocny ogranicza zmeczenie wzroku podczas wachty nocnej.
+          </p>
+          <div class="vitalis-theme-options">
+            <button type="button" class="vitalis-theme-btn ${theme === 'night' ? 'active' : ''}" data-theme-select="night">
+              <strong style="font-size: 14px;">Tryb nocny orbitalny</strong>
+              <span style="font-size: 12px; color: var(--text-secondary);">Ciemniejszy motyw przyjazny dla oka</span>
+            </button>
+            <button type="button" class="vitalis-theme-btn ${theme === 'day' ? 'active' : ''}" data-theme-select="day">
+              <strong style="font-size: 14px;">Tryb dzienny stacji</strong>
+              <span style="font-size: 12px; color: var(--text-secondary);">Jasniejszy interfejs do pracy w dzien</span>
             </button>
           </div>
         </div>
       </div>
     `;
+  }
+
+  // WIDOK 4: Przebudowany Modul Motywacji
+  function renderMotywacja() {
+    const mainEl = document.getElementById('app-main');
+    if (!mainEl) return;
+    if (breathingActive) {
+      stopBreathingExercise();
+    }
+
+    const mot = ensureMotivationState();
+    const commanderFlag = isCommander();
+    const currentUser = getCurrentUser();
+    let targetAstro = null;
+
+    if (commanderFlag) {
+      targetAstro = getAstronautById(selectedAstroId) || (appState.astronauts && appState.astronauts[0]) || null;
+      if (targetAstro) selectedAstroId = targetAstro.id;
+    } else {
+      targetAstro = getAstronautById(appState.currentUser) || (appState.astronauts && appState.astronauts[0]) || null;
+    }
+
+    const prof = getAstroMotivationProfile(targetAstro);
+    const displayName = targetAstro ? targetAstro.name.split(' ')[0] : (currentUser ? currentUser.name.split(' ')[0] : 'Astronauto');
+    const todayStr = new Date().toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    const astroSelectHtml = commanderFlag && appState.astronauts.length > 0
+      ? '<div style="display: flex; align-items: center; gap: 10px;"><label for="mot-astro-select" style="font-size: 12px; color: var(--text-secondary); font-weight: 700;">Profil:</label><select id="mot-astro-select" class="live-select-input">' +
+        appState.astronauts.map(function(a) {
+          return '<option value="' + a.id + '" ' + (targetAstro && a.id === targetAstro.id ? 'selected' : '') + '>' + a.name + '</option>';
+        }).join('') + '</select></div>'
+      : '';
+
+    let contentHtml = '';
+    if (motivationSubTab === 'zdrowie') {
+      contentHtml = renderMotywacjaZdrowieHtml(targetAstro);
+    } else if (motivationSubTab === 'nagrody') {
+      contentHtml = renderMotywacjaNagrodyHtml(mot, prof);
+    } else if (motivationSubTab === 'ranking') {
+      contentHtml = renderMotywacjaRankingHtml(mot, targetAstro);
+    } else if (motivationSubTab === 'ustawienia') {
+      contentHtml = renderMotywacjaUstawieniaHtml(prof, targetAstro);
+    } else {
+      contentHtml = renderMotywacjaPulpitHtml(mot, targetAstro, prof);
+    }
+
+    mainEl.innerHTML = `
+      <div class="vitalis-topbar">
+        <div>
+          <div class="vitalis-greeting-date">${todayStr} | Dzien misji ${mot.missionDay}</div>
+          <h1 class="view-title">Dzien dobry, ${displayName}</h1>
+          <p class="view-subtitle">Modul motywacji zalogi : gotowosc badan, stabilnosc parametrow, punkty i nagrody</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          ${astroSelectHtml}
+          <span class="badge-tag">${formatPoints(prof.points)} pkt misji</span>
+        </div>
+      </div>
+
+      <div class="vitalis-subnav" role="tablist" aria-label="Sekcje Modulu Motywacji">
+        <button type="button" class="vitalis-subtab-btn ${motivationSubTab === 'pulpit' ? 'active' : ''}" data-vitalis-tab="pulpit">
+          Pulpit gotowosci
+        </button>
+        <button type="button" class="vitalis-subtab-btn ${motivationSubTab === 'zdrowie' ? 'active' : ''}" data-vitalis-tab="zdrowie">
+          Zdrowie i 30 dni
+        </button>
+        <button type="button" class="vitalis-subtab-btn ${motivationSubTab === 'nagrody' ? 'active' : ''}" data-vitalis-tab="nagrody">
+          Nagrody i punkty
+        </button>
+        <button type="button" class="vitalis-subtab-btn ${motivationSubTab === 'ranking' ? 'active' : ''}" data-vitalis-tab="ranking">
+          Ranking zalogi
+        </button>
+        <button type="button" class="vitalis-subtab-btn ${motivationSubTab === 'ustawienia' ? 'active' : ''}" data-vitalis-tab="ustawienia">
+          Okno 3h i tryb
+        </button>
+      </div>
+
+      ${contentHtml}
+    `;
+
+    // Przelaczanie podzakladek Modulu Motywacji
+    mainEl.querySelectorAll('[data-vitalis-tab]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        motivationSubTab = btn.getAttribute('data-vitalis-tab');
+        renderMotywacja();
+      });
+    });
+
+    mainEl.querySelectorAll('[data-vitalis-jump]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        motivationSubTab = btn.getAttribute('data-vitalis-jump');
+        renderMotywacja();
+      });
+    });
+
+    const astroSel = document.getElementById('mot-astro-select');
+    if (astroSel) {
+      astroSel.addEventListener('change', function() {
+        selectedAstroId = astroSel.value;
+        renderMotywacja();
+      });
+    }
+
+    // Przelacznik 7 dni / 30 dni
+    mainEl.querySelectorAll('[data-vitalis-period]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        motivationPeriod = btn.getAttribute('data-vitalis-period');
+        renderMotywacja();
+      });
+    });
+
+    // Zaliczenie kolejnego badania +10%
+    const completeNextBtn = document.getElementById('btn-vitalis-complete-next');
+    if (completeNextBtn) {
+      completeNextBtn.addEventListener('click', function() {
+        const total = mot.dailyCheckupLabels.length;
+        for (let i = 0; i < total; i++) {
+          if (prof.completedIndices.indexOf(i) === -1) {
+            prof.completedIndices.push(i);
+            prof.points += 100 + prof.streakDays * 5;
+            break;
+          }
+        }
+        saveState(appState);
+        renderMotywacja();
+      });
+    }
+
+    // Reczne odznaczanie konkretnego badania na liscie
+    mainEl.querySelectorAll('.vitalis-task-item').forEach(function(itemBtn) {
+      itemBtn.addEventListener('click', function() {
+        const idx = parseInt(itemBtn.getAttribute('data-task-idx'), 10);
+        const pos = prof.completedIndices.indexOf(idx);
+        const deltaPts = 100 + prof.streakDays * 5;
+        if (pos === -1) {
+          prof.completedIndices.push(idx);
+          prof.points += deltaPts;
+        } else {
+          prof.completedIndices.splice(pos, 1);
+          prof.points = Math.max(0, prof.points - deltaPts);
+        }
+        saveState(appState);
+        renderMotywacja();
+      });
+    });
+
+    // Wymiana punktow na nagrody
+    mainEl.querySelectorAll('.btn-redeem-reward').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const rewId = btn.getAttribute('data-reward-id');
+        const rew = mot.rewardsCatalog.find(function(r) { return r.id === rewId; });
+        if (!rew || prof.points < rew.cost) return;
+        prof.points -= rew.cost;
+        prof.redeemed.unshift({
+          id: rew.id,
+          title: rew.title,
+          cost: rew.cost,
+          date: new Date().toLocaleDateString('pl-PL') + ' ' + new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
+        });
+        saveState(appState);
+        renderMotywacja();
+      });
+    });
+
+    // Wybor 3-godzinnego okna pomiarowego
+    mainEl.querySelectorAll('[data-window-start]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        prof.windowStart = parseInt(btn.getAttribute('data-window-start'), 10) || 7;
+        saveState(appState);
+        renderMotywacja();
+      });
+    });
+
+    // Tryb dzienny / nocny
+    mainEl.querySelectorAll('[data-theme-select]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        applyThemeMode(btn.getAttribute('data-theme-select'));
+        saveState(appState);
+        renderMotywacja();
+      });
+    });
 
     // Nasluch cwiczen oddechowych
     const toggleBreathBtn = document.getElementById('btn-toggle-breath');
@@ -2737,6 +3379,8 @@
         }
       });
     }
+
+    enforceConstraints(mainEl);
   }
 
   // Funkcje do cwiczenia oddechowego
@@ -3893,6 +4537,10 @@
 
   // Glowny dispatcher renderowania
   function renderApp() {
+    applyThemeMode(appState.themeMode || 'night');
+    if (activeTab !== 'motywacja' && breathingActive) {
+      stopBreathingExercise();
+    }
     renderHeader();
 
     const mainEl = document.getElementById('app-main');
