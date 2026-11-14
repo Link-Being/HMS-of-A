@@ -18,6 +18,15 @@ from flask import Flask, Response, send_from_directory, jsonify, request
 from model import Centrum, normy as N, raport_jako_tekst, status_na_ui
 
 app = Flask(__name__, static_folder=".")
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
+
+@app.after_request
+def disable_client_cache(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 state_lock = threading.Lock()
 stop_event = threading.Event()
