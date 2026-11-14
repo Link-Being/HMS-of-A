@@ -6,7 +6,7 @@
   'use strict';
 
   // Inicjalizacja stanu z localStorage lub danych poczatkowych
-  const STORAGE_KEY = 'HMS_OF_A_STATE_V11';
+  const STORAGE_KEY = 'HMS_OF_A_STATE_V12';
 
   function sanitizeCrewState(state) {
     if (!state) return state;
@@ -66,6 +66,7 @@
       localStorage.removeItem('HMS_OF_A_STATE_V8');
       localStorage.removeItem('HMS_OF_A_STATE_V9');
       localStorage.removeItem('HMS_OF_A_STATE_V10');
+      localStorage.removeItem('HMS_OF_A_STATE_V11');
 
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -463,6 +464,302 @@
     setInterval(tick, 1000);
   }
 
+  function sanitizeModelText(txt) {
+    if (txt === null || txt === undefined) return '';
+    return String(txt)
+      .replace(/[\(\)]/g, ' ')
+      .replace(/[\u2013\u2014]/g, '-')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  function statusBadgeFor(st) {
+    if (st === 'alarm' || st === 'critical') return 'badge-critical';
+    if (st === 'uwaga' || st === 'warning') return 'badge-warning';
+    return 'badge-normal';
+  }
+
+  function statusLabelFor(st) {
+    if (st === 'alarm' || st === 'critical') return 'Podwyzszone ryzyko';
+    if (st === 'uwaga' || st === 'warning') return 'Wymagana obserwacja';
+    return 'Stan stabilny';
+  }
+
+  function renderChecklistChipsHtml(astro) {
+    const v = astro && astro.vitals ? astro.vitals : {};
+    const obszary = astro && astro.modelSummary && astro.modelSummary.obszary ? astro.modelSummary.obszary : null;
+    if (obszary) {
+      const order = ['kardio', 'sen', 'stres', 'aktywnosc', 'biochemia', 'poznawcze', 'srodowisko'];
+      return order.filter(function(k) { return obszary[k]; }).map(function(k) {
+        const o = obszary[k];
+        const st = o.status || 'norma';
+        const isOk = st === 'norma';
+        const label = st === 'alarm' ? 'Alarm' : (st === 'uwaga' ? 'Wymaga uwagi' : 'W normie');
+        const idxTxt = (o.indeks !== null && o.indeks !== undefined) ? (' ' + Math.round(o.indeks) + '/100') : '';
+        return `
+          <div class="system-check-chip ${isOk ? 'chip-ok' : 'chip-warn'}">
+            <span class="system-check-dot"></span>
+            <span>${sanitizeModelText(o.nazwa)}: ${label}${idxTxt}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    const hrOk = v.hr >= 50 && v.hr <= 80.5;
+    const bpOk = v.bpSys <= 130 && v.bpDia <= 84;
+    const spo2Ok = v.spo2 >= 96;
+    const tempOk = v.temp >= 36.2 && v.temp <= 37.35;
+    const respOk = v.resp >= 12 && v.resp <= 18.5;
+    const stressOk = v.stressLevel <= 50;
+    const checks = [
+      { label: 'Uklad krazenia i serce', ok: hrOk && bpOk && spo2Ok, text: (hrOk && bpOk && spo2Ok) ? 'W normie' : 'Wymaga uwagi' },
+      { label: 'Termoregulacja i oddech', ok: tempOk && respOk, text: (tempOk && respOk) ? 'Stabilna' : 'Do weryfikacji' },
+      { label: 'Rownowaga obciazenia', ok: stressOk, text: stressOk ? 'Niski stres' : 'Wzmozone obciazenie' },
+      { label: 'Sen i regeneracja', ok: (v.sleepHours || 7.5) >= 7.0, text: ((v.sleepHours || 7.5) >= 7.0) ? 'W normie' : 'Skrocony' },
+      { label: 'Biochemia potu', ok: (v.cortisol || 4.0) < 6.5 && (v.lactate || 1.6) < 2.5, text: ((v.cortisol || 4.0) < 6.5 && (v.lactate || 1.6) < 2.5) ? 'W normie' : 'Podwyzszona' }
+    ];
+    return checks.map(function(c) {
+      return `
+        <div class="system-check-chip ${c.ok ? 'chip-ok' : 'chip-warn'}">
+          <span class="system-check-dot"></span>
+          <span>${c.label}: ${c.text}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderModelSummaryInnerHtml(astro) {
+    const m = astro && astro.modelSummary ? astro.modelSummary : null;
+    if (!m) {
+      return `
+        <div class="model-report-box">
+          <p class="model-report-line">Model podsumowujacy oczekuje na aktywna synchronizacje z serwerem Python. W trybie lokalnym wyswietlane sa biezace progi referencyjne.</p>
+        </div>
+      `;
+    }
+
+    const og = m.ogolny || {};
+    const an = m.anomalia || {};
+    const rap = m.raport || {};
+    const devs = Array.isArray(m.odchylenia) ? m.odchylenia : [];
+    const deviatedCount = devs.filter(function(d) { return d.odchylony; }).length;
+    const ogStatus = og.status || 'norma';
+    const anVal = (an.wynik !== null && an.wynik !== undefined) ? Math.round(an.wynik) + '/100' : 'Kalibracja';
+    const anMethod = an.metoda === 'siec' ? 'Autoenkoder 11-16-4-16-11' : (an.metoda === 'kalibracja' ? 'Kalibracja podstawy' : 'Porownanie sesji');
+    const indeksTxt = (og.indeks !== null && og.indeks !== undefined) ? (og.indeks.toFixed ? og.indeks.toFixed(1) : og.indeks) + '/100' : 'brak';
+    const covPct = Math.round((og.pokrycie || 0) * 100);
+    const pwPct = Math.round((og.pewnosc || 0) * 100);
+    const basePct = Math.round((m.baza_postep || 0) * 100);
+
+    const devCardsHtml = devs.map(function(o) {
+      const score = Math.round(o.wynik || 0);
+      const isAlarm = score >= 60 || o.status === 'alarm';
+      const fillClass = isAlarm ? 'fill-critical' : (o.odchylony ? 'fill-warning' : '');
+      const boxClass = isAlarm ? 'dev-alarm' : (o.odchylony ? 'dev-odchylony' : '');
+      const params = Array.isArray(o.parametry) ? o.parametry : [];
+      const refBad = params.some(function(p) { return p.kryteria && p.kryteria.norma_ref; });
+      const perBad = params.some(function(p) { return p.kryteria && p.kryteria.norma_osobista; });
+      const trdBad = params.some(function(p) { return p.kryteria && p.kryteria.trend; });
+      const tags = [];
+      if (refBad) tags.push('<span class="criteria-tag tag-crit">Norma referencyjna</span>');
+      if (perBad) tags.push('<span class="criteria-tag tag-warn">Norma osobista</span>');
+      if (trdBad) tags.push('<span class="criteria-tag tag-warn">Trend</span>');
+      if (tags.length === 0) tags.push('<span class="criteria-tag">Wszystkie kryteria w normie</span>');
+      const topParamNotes = params.slice(0, 2).map(function(p) {
+        return sanitizeModelText(p.nazwa + ': ' + p.wartosc + ' ' + p.jednostka);
+      }).join(' | ');
+
+      return `
+        <div class="deviation-item ${boxClass}">
+          <div class="deviation-top-row">
+            <span class="deviation-area-name">${sanitizeModelText(o.nazwa)}</span>
+            <span class="deviation-score">${score}/100</span>
+          </div>
+          <div class="deviation-bar-track">
+            <div class="deviation-bar-fill ${fillClass}" style="width: ${Math.min(100, Math.max(4, score))}%"></div>
+          </div>
+          <div class="deviation-criteria-row">${tags.join('')}</div>
+          ${topParamNotes ? `<div class="model-kpi-sub mt-1">${topParamNotes}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    const akapityHtml = (rap.akapity || []).map(function(line) {
+      return `<div class="model-report-line">${sanitizeModelText(line)}</div>`;
+    }).join('');
+
+    const recsHtml = (rap.zalecenia && rap.zalecenia.length > 0) ? `
+      <div class="model-rec-list">
+        ${rap.zalecenia.map(function(r) {
+          return `<div class="model-rec-item">- ${sanitizeModelText(r)}</div>`;
+        }).join('')}
+      </div>
+    ` : '';
+
+    const alertsHtml = (m.alerty && m.alerty.length > 0) ? `
+      <div class="model-alert-feed">
+        ${m.alerty.slice(0, 3).map(function(al) {
+          return `<div class="model-alert-pill ${al.poziom === 'alarm' ? 'alert-alarm' : ''}">${sanitizeModelText(al.tekst)}</div>`;
+        }).join('')}
+      </div>
+    ` : '';
+
+    return `
+      <div class="model-summary-header">
+        <div>
+          <h3>Model podsumowujacy stanu : autoenkoder i analiza odchylen</h3>
+          <p class="section-subtitle">Wspolna ocena norm referencyjnych, adaptacyjnej bazy osobistej, trendu i korelacji z kabina ECLSS</p>
+        </div>
+        <div class="model-actions-inline">
+          <span class="status-pill ${statusBadgeFor(ogStatus)}">${statusLabelFor(ogStatus)}</span>
+          <a class="btn btn-outline btn-sm" href="/api/raport.txt?astro_id=${encodeURIComponent(astro.id)}" target="_blank" rel="noopener">Pobierz raport TXT</a>
+        </div>
+      </div>
+
+      <div class="model-kpi-grid">
+        <div class="model-kpi-box">
+          <span class="model-kpi-label">Indeks gotowosci</span>
+          <span class="model-kpi-val">${indeksTxt}</span>
+          <span class="model-kpi-sub">Pewnosc oceny ${pwPct}%</span>
+        </div>
+        <div class="model-kpi-box">
+          <span class="model-kpi-label">Siec anomalii</span>
+          <span class="model-kpi-val">${anVal}</span>
+          <span class="model-kpi-sub">${anMethod}</span>
+        </div>
+        <div class="model-kpi-box">
+          <span class="model-kpi-label">Pokrycie i baza</span>
+          <span class="model-kpi-val">${covPct}% / ${basePct}%</span>
+          <span class="model-kpi-sub">Zrodla aktywne i kalibracja</span>
+        </div>
+        <div class="model-kpi-box">
+          <span class="model-kpi-label">Obszary odchylone</span>
+          <span class="model-kpi-val">${deviatedCount} / ${devs.length}</span>
+          <span class="model-kpi-sub">Analiza 3-kryterialna</span>
+        </div>
+      </div>
+
+      <div class="deviation-list">
+        ${devCardsHtml}
+      </div>
+
+      <div class="model-report-box">
+        ${akapityHtml}
+        ${recsHtml}
+      </div>
+      ${alertsHtml}
+    `;
+  }
+
+  function renderCrewModelSummaryInnerHtml(cs, astronauts, eclss) {
+    const summary = cs && cs.priorityAstronauts ? cs : {
+      crewIndex: 0,
+      overallStatus: 'normal',
+      statusLabel: 'Tryb lokalny',
+      avgAnomaly: null,
+      co2: (eclss && eclss.co2) || 2641,
+      temp: (eclss && eclss.temp) || 24.1,
+      dailyRadiation: (eclss && eclss.dailyRadiation) || 0.21,
+      priorityAstronauts: (astronauts || []).map(function(a) {
+        return {
+          id: a.id,
+          name: a.name,
+          overallStatus: a.overallStatus || 'normal',
+          statusLabel: a.statusLabel || 'Stan stabilny',
+          index: a.modelSummary && a.modelSummary.ogolny ? a.modelSummary.ogolny.indeks : null,
+          anomaly: a.modelSummary && a.modelSummary.anomalia ? a.modelSummary.anomalia.wynik : null,
+          topDeviations: [],
+          topRecommendation: a.statusDescription || ''
+        };
+      }),
+      alerts: [],
+      recommendations: [],
+      summaryText: 'Podsumowanie zalogi oparte na wspolnych danych telemetrycznych i stacyjnych.'
+    };
+
+    const idxTxt = (summary.crewIndex !== null && summary.crewIndex !== undefined) ? summary.crewIndex + '/100' : 'brak';
+    const anomTxt = (summary.avgAnomaly !== null && summary.avgAnomaly !== undefined) ? summary.avgAnomaly + '/100' : 'kalibracja';
+
+    const prioHtml = (summary.priorityAstronauts || []).map(function(p) {
+      const cls = p.overallStatus === 'critical' ? 'prio-critical' : (p.overallStatus === 'warning' ? 'prio-warning' : '');
+      const pIdx = (p.index !== null && p.index !== undefined) ? p.index + '/100' : '--';
+      const pAn = (p.anomaly !== null && p.anomaly !== undefined) ? p.anomaly + '/100' : '--';
+      const devTxt = (p.topDeviations && p.topDeviations.length > 0) ? p.topDeviations.join(', ') : 'Brak odchylen obszarowych';
+      return `
+        <div class="model-priority-chip ${cls}">
+          <div class="deviation-top-row">
+            <span class="deviation-area-name">${sanitizeModelText(p.name)}</span>
+            <span class="status-pill ${statusBadgeFor(p.overallStatus)}">${sanitizeModelText(p.statusLabel)}</span>
+          </div>
+          <div class="model-kpi-sub">Indeks: <strong>${pIdx}</strong> | Anomalia: <strong>${pAn}</strong></div>
+          <div class="model-kpi-sub">${sanitizeModelText(devTxt)}</div>
+        </div>
+      `;
+    }).join('');
+
+    const recsHtml = (summary.recommendations && summary.recommendations.length > 0) ? `
+      <div class="model-rec-list">
+        ${summary.recommendations.map(function(r) {
+          return `<div class="model-rec-item">- ${sanitizeModelText(r)}</div>`;
+        }).join('')}
+      </div>
+    ` : '';
+
+    const alertsHtml = (summary.alerts && summary.alerts.length > 0) ? `
+      <div class="model-alert-feed">
+        ${summary.alerts.slice(0, 4).map(function(al) {
+          return `<div class="model-alert-pill ${al.poziom === 'alarm' ? 'alert-alarm' : ''}">${sanitizeModelText(al.astroName + ': ' + al.tekst)}</div>`;
+        }).join('')}
+      </div>
+    ` : '';
+
+    return `
+      <div class="model-summary-header">
+        <div>
+          <h2>Model podsumowujacy stanu zalogi : wspolny potok telemetryczny ML</h2>
+          <p class="section-subtitle">Autoenkoder wielosygnalowy 11-16-4-16-11, adaptacyjna baza osobista i dane srodowiskowe ECLSS OSDR</p>
+        </div>
+        <div class="model-actions-inline">
+          <span class="status-pill ${statusBadgeFor(summary.overallStatus)}">${sanitizeModelText(summary.statusLabel)}</span>
+          <a class="btn btn-outline btn-sm" href="/api/raport.txt" target="_blank" rel="noopener">Pobierz raport zbiorczy TXT</a>
+        </div>
+      </div>
+
+      <div class="model-kpi-grid">
+        <div class="model-kpi-box">
+          <span class="model-kpi-label">Sredni indeks zalogi</span>
+          <span class="model-kpi-val">${idxTxt}</span>
+          <span class="model-kpi-sub">Skala 0 - 100 modelu</span>
+        </div>
+        <div class="model-kpi-box">
+          <span class="model-kpi-label">Sredni wynik anomalii</span>
+          <span class="model-kpi-val">${anomTxt}</span>
+          <span class="model-kpi-sub">Siec neuronowa NASA OSDR</span>
+        </div>
+        <div class="model-kpi-box">
+          <span class="model-kpi-label">CO2 kabiny ECLSS</span>
+          <span class="model-kpi-val">${summary.co2 || (eclss && eclss.co2) || 2641} ppm</span>
+          <span class="model-kpi-sub">Temp ${summary.temp || (eclss && eclss.temp) || 24.1} st. C</span>
+        </div>
+        <div class="model-kpi-box">
+          <span class="model-kpi-label">Promieniowanie dobowe</span>
+          <span class="model-kpi-val">${summary.dailyRadiation || (eclss && eclss.dailyRadiation) || 0.21} mGy/d</span>
+          <span class="model-kpi-sub">Norma: ponizej 1.0 mGy/d</span>
+        </div>
+      </div>
+
+      <div class="model-crew-priority-list">
+        ${prioHtml}
+      </div>
+
+      <div class="model-report-box">
+        <div class="model-report-line">${sanitizeModelText(summary.summaryText)}</div>
+        ${recsHtml}
+      </div>
+      ${alertsHtml}
+    `;
+  }
+
   // WIDOK 1: Pulpit glowny
   function renderPulpit() {
     const mainEl = document.getElementById('app-main');
@@ -518,6 +815,10 @@
         statusBadgeClass = 'badge-critical';
       }
 
+      const ms = a.modelSummary || null;
+      const msIndeks = (ms && ms.ogolny && ms.ogolny.indeks !== null && ms.ogolny.indeks !== undefined) ? Math.round(ms.ogolny.indeks) + '/100' : '--';
+      const msAnom = (ms && ms.anomalia && ms.anomalia.wynik !== null && ms.anomalia.wynik !== undefined) ? Math.round(ms.anomalia.wynik) + '/100' : '--';
+
       const latestTest = (a.periodicTests && a.periodicTests.length > 0) ? a.periodicTests[0] : null;
       const latestTestHtml = latestTest ? `
         <div class="last-test-preview">
@@ -537,7 +838,12 @@
             <span class="status-pill ${statusBadgeClass}">${a.statusLabel}</span>
           </div>
 
-          <p class="astro-card-desc">${a.statusDescription}</p>
+          <div class="model-card-mini-bar">
+            <span>Model ML podsumowujacy:</span>
+            <span class="model-card-mini-val metric-val-model">Indeks ${msIndeks} | Anomalia ${msAnom}</span>
+          </div>
+
+          <p class="astro-card-desc">${sanitizeModelText(a.statusDescription)}</p>
 
           <div class="metrics-grid">
             <div class="metric-item">
@@ -581,6 +887,14 @@
       });
     }
 
+    const eclss = appState.eclssCabin || {};
+    const bannerClass = criticalCount > 0 ? 'banner-critical' : (warningCount > 0 ? 'banner-warning' : 'banner-info');
+    const crewSummaryText = (appState.crewSummary && appState.crewSummary.summaryText)
+      ? sanitizeModelText(appState.crewSummary.summaryText)
+      : (criticalCount > 0
+        ? 'Zanotowano podwyzszone ryzyko u czlonka zalogi. Zaleca sie bezzwloczne wdrozenie protokolu interwencji.'
+        : (totalAstro === 0 ? 'Brak aktywnej zalogi w misji. Przejdz do zakladki Ustawienia aby dodac personel orbitalny.' : 'Wszyscy monitorowani astronauci utrzymuja zadowalajaca rownowage fizjologiczna.'));
+
     container.innerHTML = `
       <div class="view-header">
         <div>
@@ -592,7 +906,7 @@
         </div>
       </div>
 
-      <div class="alert-banner-box ${criticalCount > 0 ? 'banner-critical' : 'banner-info'}" id="dashboard-alert-box">
+      <div class="alert-banner-box ${bannerClass}" id="dashboard-alert-box">
         <div class="alert-icon-wrap">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M12 3 L22 20 H2 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
@@ -600,8 +914,8 @@
           </svg>
         </div>
         <div class="alert-text-wrap">
-          <strong>Raport bieżący systemu nadzoru medycznego:</strong>
-          <span id="dashboard-alert-text">${criticalCount > 0 ? 'Zanotowano podwyzszone ryzyko kardiologiczne u czlonka zalogi. Zaleca sie bezzwloczne wdrozenie protokolu interwencji.' : (totalAstro === 0 ? 'Brak aktywnej zalogi w misji. Przejdz do zakladki Ustawienia aby dodac personel orbitalny.' : 'Wszyscy monitorowani astronauci utrzymuja zadowalajaca rownowage fizjologiczna.')}</span>
+          <strong>Raport bieżący modelu podsumowującego:</strong>
+          <span id="dashboard-alert-text">${crewSummaryText}</span>
         </div>
       </div>
 
@@ -628,43 +942,52 @@
         </div>
       </div>
 
+      <div class="model-summary-card" id="crew-model-summary-panel">
+        ${renderCrewModelSummaryInnerHtml(appState.crewSummary, appState.astronauts, eclss)}
+      </div>
+
       <div class="eclss-overview-card">
         <div class="section-title-bar">
           <div>
             <h2>Stacja kosmiczna : Parametry modulu zalogowego ECLSS</h2>
-            <p class="section-subtitle">Srodowiskowa telemetria podtrzymywania zycia w trybie ciaglym</p>
+            <p class="section-subtitle">Srodowiskowa telemetria podtrzymywania zycia w trybie ciaglym z danych NASA OSDR RR-1</p>
           </div>
-          <span class="badge-tag">Sensor stacji</span>
+          <span class="badge-tag" id="eclss-source-tag">${sanitizeModelText(eclss.sourceTime || 'Sensor stacji OSDR')}</span>
         </div>
         <div class="eclss-metrics-grid">
           <div class="eclss-chip">
             <span class="eclss-chip-title">Temperatura kabiny:</span>
-            <span class="eclss-chip-value" id="eclss-temp">${(appState.eclssCabin && appState.eclssCabin.temp) || 22.4} st. C</span>
-            <span class="eclss-chip-norm">Norma: 22 - 24 st. C</span>
+            <span class="eclss-chip-value" id="eclss-temp">${eclss.temp !== undefined ? eclss.temp : 24.1} st. C</span>
+            <span class="eclss-chip-norm">Norma: 21.0 - 25.5 st. C</span>
           </div>
           <div class="eclss-chip">
             <span class="eclss-chip-title">Cisnienie powietrza:</span>
-            <span class="eclss-chip-value" id="eclss-pressure">${(appState.eclssCabin && appState.eclssCabin.pressure) || 101.3} kPa</span>
-            <span class="eclss-chip-norm">Norma: ok. 101 kPa</span>
+            <span class="eclss-chip-value" id="eclss-pressure">${eclss.pressure !== undefined ? eclss.pressure : 101.3} kPa</span>
+            <span class="eclss-chip-norm">Norma: 99 - 103 kPa</span>
           </div>
           <div class="eclss-chip">
             <span class="eclss-chip-title">Wilgotnosc wzgledna:</span>
-            <span class="eclss-chip-value" id="eclss-humidity">${(appState.eclssCabin && appState.eclssCabin.humidity) || 44} %</span>
-            <span class="eclss-chip-norm">Norma: 40 - 60 %</span>
+            <span class="eclss-chip-value" id="eclss-humidity">${eclss.humidity !== undefined ? eclss.humidity : 39} %</span>
+            <span class="eclss-chip-norm">Norma: 30 - 60 %</span>
           </div>
           <div class="eclss-chip">
             <span class="eclss-chip-title">Stezenie tlenu O2:</span>
-            <span class="eclss-chip-value" id="eclss-o2">${(appState.eclssCabin && appState.eclssCabin.o2) || 20.9} %</span>
-            <span class="eclss-chip-norm">Norma: 21 % O2</span>
+            <span class="eclss-chip-value" id="eclss-o2">${eclss.o2 !== undefined ? eclss.o2 : 20.9} %</span>
+            <span class="eclss-chip-norm">Norma: 20.5 - 22.0 % O2</span>
           </div>
           <div class="eclss-chip">
             <span class="eclss-chip-title">Stezenie CO2:</span>
-            <span class="eclss-chip-value" id="eclss-co2">${(appState.eclssCabin && appState.eclssCabin.co2) || 410} ppm</span>
-            <span class="eclss-chip-norm">Limit: ponizej 1000 ppm</span>
+            <span class="eclss-chip-value" id="eclss-co2">${eclss.co2 !== undefined ? eclss.co2 : 2641} ppm</span>
+            <span class="eclss-chip-norm">Limit: ponizej 3000 ppm</span>
+          </div>
+          <div class="eclss-chip">
+            <span class="eclss-chip-title">Promieniowanie dobowe:</span>
+            <span class="eclss-chip-value" id="eclss-rad">${eclss.dailyRadiation !== undefined ? eclss.dailyRadiation : 0.21} mGy/d</span>
+            <span class="eclss-chip-norm">Limit: ponizej 1.0 mGy/d</span>
           </div>
           <div class="eclss-chip">
             <span class="eclss-chip-title">Zbiorniki wody:</span>
-            <span class="eclss-chip-value" id="eclss-water">${(appState.eclssCabin && appState.eclssCabin.waterTanks) || 94} %</span>
+            <span class="eclss-chip-value" id="eclss-water">${eclss.waterTanks !== undefined ? eclss.waterTanks : 94} %</span>
             <span class="eclss-chip-norm">Zapas bezpieczny</span>
           </div>
         </div>
@@ -842,10 +1165,10 @@
       statusPillClass = 'badge-warning';
       bannerClass = 'status-banner-warning';
       headlineText = 'OGOLNY STAN ZDROWIA : WYMAGANA OBSERWACJA - ZANOTOWANO ODCHYLENIA';
-      sublineText = currentAstro.statusDescription || 'Zanotowano pojedyncze odchylenie biometryczne. Wskazany odpoczynek i kontrola zaleconych parametrow.';
+      sublineText = sanitizeModelText(currentAstro.statusDescription) || 'Zanotowano pojedyncze odchylenie biometryczne. Wskazany odpoczynek i kontrola zaleconych parametrow.';
       iconSvg = `
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="10"></circle>
+          <circle cx="12" cy="12" r="10"></circle>
           <line x1="12" y1="8" x2="12" y2="12"></line>
           <line x1="12" y1="16" x2="12.01" y2="16"></line>
         </svg>
@@ -854,7 +1177,7 @@
       statusPillClass = 'badge-critical';
       bannerClass = 'status-banner-critical';
       headlineText = 'OGOLNY STAN ZDROWIA : STAN KRYTYCZNY - WYMAGANA PILNA INTERWENCJA';
-      sublineText = currentAstro.statusDescription || 'Wykryto przekroczenie korytarza bezpieczenstwa biometrycznego. Skontaktuj sie ze stacja kontroli.';
+      sublineText = sanitizeModelText(currentAstro.statusDescription) || 'Wykryto przekroczenie korytarza bezpieczenstwa biometrycznego. Skontaktuj sie ze stacja kontroli.';
       iconSvg = `
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
@@ -864,39 +1187,18 @@
       `;
     }
 
-    const hrOk = v.hr >= 55 && v.hr <= 95;
-    const bpOk = v.bpSys <= 130 && v.bpDia <= 85;
+    const hrOk = v.hr >= 50 && v.hr <= 80.5;
+    const bpOk = v.bpSys <= 130 && v.bpDia <= 84;
     const spo2Ok = v.spo2 >= 96;
-    const tempOk = v.temp >= 36.4 && v.temp <= 37.3;
-    const respOk = v.resp >= 12 && v.resp <= 18;
+    const tempOk = v.temp >= 36.2 && v.temp <= 37.35;
+    const respOk = v.resp >= 12 && v.resp <= 18.5;
     const stressOk = v.stressLevel <= 50;
+    const sleepScoreVal = v.sleepScore !== undefined ? v.sleepScore : 85;
+    const cortisolVal = v.cortisol !== undefined ? v.cortisol : 4.2;
+    const lactateVal = v.lactate !== undefined ? v.lactate : 1.6;
+    const cogVal = v.cognitiveReadiness !== undefined ? v.cognitiveReadiness : 90;
 
-    const checklistHtml = `
-      <div class="system-check-chip ${hrOk ? 'chip-ok' : 'chip-warn'}">
-        <span class="system-check-dot"></span>
-        <span>Uklad krazenia i serce: ${hrOk ? 'W normie' : 'Wymaga uwagi'}</span>
-      </div>
-      <div class="system-check-chip ${spo2Ok ? 'chip-ok' : 'chip-warn'}">
-        <span class="system-check-dot"></span>
-        <span>Saturacja tlenowa SpO2: ${spo2Ok ? 'W normie' : 'Wymaga uwagi'}</span>
-      </div>
-      <div class="system-check-chip ${bpOk ? 'chip-ok' : 'chip-warn'}">
-        <span class="system-check-dot"></span>
-        <span>Cisnienie tetnicze RR: ${bpOk ? 'Prawidlowe' : 'Lekko podwyzszone'}</span>
-      </div>
-      <div class="system-check-chip ${tempOk ? 'chip-ok' : 'chip-warn'}">
-        <span class="system-check-dot"></span>
-        <span>Termoregulacja ciala: ${tempOk ? 'Stabilna' : 'Do weryfikacji'}</span>
-      </div>
-      <div class="system-check-chip ${respOk ? 'chip-ok' : 'chip-warn'}">
-        <span class="system-check-dot"></span>
-        <span>Wentylacja i oddech: ${respOk ? 'W normie' : 'Do obserwacji'}</span>
-      </div>
-      <div class="system-check-chip ${stressOk ? 'chip-ok' : 'chip-warn'}">
-        <span class="system-check-dot"></span>
-        <span>Rownowaga obciazenia: ${stressOk ? 'Niski stres' : 'Wzmozone obciazenie'}</span>
-      </div>
-    `;
+    const checklistHtml = renderChecklistChipsHtml(currentAstro);
 
     container.innerHTML = `
       <div class="view-header">
@@ -905,11 +1207,11 @@
           <p class="view-subtitle">Witaj ${currentAstro.name}. Twoje biezace wskazniki fizjologiczne sa monitorowane w czasie rzeczywistym.</p>
         </div>
         <div class="user-status-flag">
-          <span class="status-pill ${statusPillClass}">${currentAstro.statusLabel}</span>
+          <span class="status-pill ${statusPillClass}" id="astro-status-badge-top">${currentAstro.statusLabel}</span>
         </div>
       </div>
 
-      <div class="astro-overall-status-banner ${bannerClass}">
+      <div class="astro-overall-status-banner ${bannerClass}" id="astro-status-banner">
         <div class="astro-status-header-row">
           <div class="astro-status-title-group">
             <div class="astro-status-icon-circle">
@@ -917,16 +1219,16 @@
             </div>
             <div>
               <div class="text-xs uppercase font-bold tracking-wider text-cyan">Ogolna ocena kondycji organizmu : Stan biezacy</div>
-              <div class="astro-status-headline">${headlineText}</div>
-              <div class="astro-status-subline">${sublineText}</div>
+              <div class="astro-status-headline" id="astro-status-headline">${headlineText}</div>
+              <div class="astro-status-subline" id="astro-status-subline">${sanitizeModelText(sublineText)}</div>
             </div>
           </div>
           <div class="astro-status-badge-wrap">
-            <span class="status-pill ${statusPillClass}">${currentAstro.statusLabel}</span>
+            <span class="status-pill ${statusPillClass}" id="astro-status-badge-main">${currentAstro.statusLabel}</span>
           </div>
         </div>
 
-        <div class="astro-systems-checklist">
+        <div class="astro-systems-checklist" id="astro-checklist-container">
           ${checklistHtml}
         </div>
       </div>
@@ -941,9 +1243,13 @@
           </div>
         </div>
         <div class="personal-status-desc">
-          <div class="desc-heading">Aktualna ocena zespolu medycznego:</div>
-          <div class="desc-content">${currentAstro.statusDescription}</div>
+          <div class="desc-heading">Aktualna ocena modelu podsumowujacego:</div>
+          <div class="desc-content" id="astro-personal-desc">${sanitizeModelText(currentAstro.statusDescription)}</div>
         </div>
+      </div>
+
+      <div class="model-summary-card" id="astro-model-summary-panel">
+        ${renderModelSummaryInnerHtml(currentAstro)}
       </div>
 
       <div class="dashboard-quick-schedule-card">
@@ -993,7 +1299,7 @@
               <span class="sensor-exact-value" id="astro-sensor-hr">${v.hr}</span>
               <span class="sensor-exact-unit">${v.hrUnit}</span>
             </div>
-            <div class="sensor-safe-range">Zakres bezpieczny: 60 do 95 bpm</div>
+            <div class="sensor-safe-range">Zakres bezpieczny: 50 do 80 bpm</div>
           </div>
 
           <div class="sensor-item-card">
@@ -1005,7 +1311,7 @@
               <span class="sensor-exact-value" id="astro-sensor-bp">${v.bpSys} na ${v.bpDia}</span>
               <span class="sensor-exact-unit">${v.bpUnit}</span>
             </div>
-            <div class="sensor-safe-range">Zakres bezpieczny: 110-130 na 70-85 mmHg</div>
+            <div class="sensor-safe-range">Zakres bezpieczny: 100-130 na 65-84 mmHg</div>
           </div>
 
           <div class="sensor-item-card">
@@ -1017,7 +1323,7 @@
               <span class="sensor-exact-value" id="astro-sensor-spo2">${v.spo2}</span>
               <span class="sensor-exact-unit">${v.spo2Unit}</span>
             </div>
-            <div class="sensor-safe-range">Wymagane minimum: 95 procent</div>
+            <div class="sensor-safe-range">Wymagane minimum: 96 procent</div>
           </div>
 
           <div class="sensor-item-card">
@@ -1029,7 +1335,7 @@
               <span class="sensor-exact-value" id="astro-sensor-temp">${v.temp}</span>
               <span class="sensor-exact-unit">${v.tempUnit}</span>
             </div>
-            <div class="sensor-safe-range">Norma fizjologiczna: 36.4 do 37.2 st. C</div>
+            <div class="sensor-safe-range">Norma fizjologiczna: 36.2 do 37.3 st. C</div>
           </div>
 
           <div class="sensor-item-card">
@@ -1059,13 +1365,13 @@
           <div class="sensor-item-card">
             <div class="sensor-item-top">
               <span class="sensor-item-label">Zmiennosc rytmu HRV Status</span>
-              <span class="badge-micro-pill pill-ok">Stabilny</span>
+              <span class="badge-micro-pill ${(v.hrv || 64) >= 45 ? 'pill-ok' : 'pill-warn'}">${(v.hrv || 64) >= 45 ? 'Stabilny' : 'Niski'}</span>
             </div>
             <div class="sensor-item-reading">
               <span class="sensor-exact-value" id="astro-sensor-hrv">${v.hrv || 64}</span>
               <span class="sensor-exact-unit">ms</span>
             </div>
-            <div class="sensor-safe-range">Status autonomiczny RMSSD: 50 do 80 ms</div>
+            <div class="sensor-safe-range">Status autonomiczny RMSSD: 45 do 80 ms</div>
           </div>
 
           <div class="sensor-item-card">
@@ -1077,19 +1383,67 @@
               <span class="sensor-exact-value" id="astro-sensor-stress">${v.stressLevel}</span>
               <span class="sensor-exact-unit">pkt</span>
             </div>
-            <div class="sensor-safe-range">Skala obciazenia: 0 do 100 pkt</div>
+            <div class="sensor-safe-range">Skala obciazenia: 0 do 50 pkt</div>
           </div>
 
           <div class="sensor-item-card">
             <div class="sensor-item-top">
               <span class="sensor-item-label">Rezerwa Body Battery</span>
-              <span class="badge-micro-pill pill-ok">Wysoka</span>
+              <span class="badge-micro-pill ${(v.bodyBattery || 82) >= 50 ? 'pill-ok' : 'pill-warn'}">${(v.bodyBattery || 82) >= 50 ? 'Wysoka' : 'Niska'}</span>
             </div>
             <div class="sensor-item-reading">
               <span class="sensor-exact-value" id="astro-sensor-bb">${v.bodyBattery || 82}</span>
               <span class="sensor-exact-unit">pkt</span>
             </div>
-            <div class="sensor-safe-range">Wskaznik gotowosci psychofizycznej</div>
+            <div class="sensor-safe-range">Wskaznik gotowosci: powyzej 50 pkt</div>
+          </div>
+
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Ocena snu Sleep Score</span>
+              <span class="badge-micro-pill ${sleepScoreVal >= 80 ? 'pill-ok' : 'pill-warn'}">${sleepScoreVal >= 80 ? 'W normie' : 'Obnizony'}</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-sleep-score">${sleepScoreVal}</span>
+              <span class="sensor-exact-unit">pkt</span>
+            </div>
+            <div class="sensor-safe-range">Cel regeneracji: powyzej 80 pkt</div>
+          </div>
+
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Kortyzol w pocie Bio-Patch</span>
+              <span class="badge-micro-pill ${cortisolVal < 6.5 ? 'pill-ok' : 'pill-warn'}">${cortisolVal < 6.5 ? 'W normie' : 'Podwyzszony'}</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-cortisol">${cortisolVal}</span>
+              <span class="sensor-exact-unit">ng/ml</span>
+            </div>
+            <div class="sensor-safe-range">Norma biochemiczna: ponizej 6.5 ng/ml</div>
+          </div>
+
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Mleczany w pocie Bio-Patch</span>
+              <span class="badge-micro-pill ${lactateVal < 2.5 ? 'pill-ok' : 'pill-warn'}">${lactateVal < 2.5 ? 'W normie' : 'Podwyzszony'}</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-lactate">${lactateVal}</span>
+              <span class="sensor-exact-unit">mmol/l</span>
+            </div>
+            <div class="sensor-safe-range">Norma spoczynkowa: ponizej 2.5 mmol/l</div>
+          </div>
+
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Gotowosc poznawcza EEG</span>
+              <span class="badge-micro-pill ${cogVal >= 75 ? 'pill-ok' : 'pill-warn'}">${cogVal >= 75 ? 'W normie' : 'Spadek'}</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-eeg">${cogVal}</span>
+              <span class="sensor-exact-unit">%</span>
+            </div>
+            <div class="sensor-safe-range">Zakres bezpieczenstwa: 75 do 100 procent</div>
           </div>
 
           <div class="sensor-item-card">
@@ -1506,10 +1860,14 @@
           <div class="status-panel-box">
             <span class="status-label-heading">Stan biezacy:</span>
             <span class="status-pill ${statusPillClass}" id="tel-hero-status-pill">${currentAstro.statusLabel}</span>
-            <p class="status-panel-note" id="tel-hero-status-desc">${currentAstro.statusDescription}</p>
+            <p class="status-panel-note" id="tel-hero-status-desc">${sanitizeModelText(currentAstro.statusDescription)}</p>
             ${commanderFlag ? `<button class="btn btn-primary btn-sm mt-2 open-order-modal-btn" data-id="${currentAstro.id}">Wydaj nowe zalecenie</button>` : ''}
           </div>
         </div>
+      </div>
+
+      <div class="model-summary-card" id="telemetry-model-summary-panel">
+        ${renderModelSummaryInnerHtml(currentAstro)}
       </div>
 
       <div class="radial-gauges-row">
@@ -1523,7 +1881,12 @@
         <div class="vital-card">
           <div class="vital-top"><span class="vital-title">Tetno spoczynkowe</span></div>
           <div class="vital-value-row"><span class="vital-val" id="tel-val-hr">${v.hr}</span><span class="vital-unit">${v.hrUnit}</span></div>
-          <div class="vital-norm">Zakres ciagly: 55 do 75 bpm</div>
+          <div class="vital-norm">Zakres ciagly: 50 do 80 bpm</div>
+        </div>
+        <div class="vital-card">
+          <div class="vital-top"><span class="vital-title">Cisnienie tetnicze</span></div>
+          <div class="vital-value-row"><span class="vital-val" id="tel-val-bp">${v.bpSys} na ${v.bpDia}</span><span class="vital-unit">${v.bpUnit}</span></div>
+          <div class="vital-norm">Norma: 100-130 na 65-84 mmHg</div>
         </div>
         <div class="vital-card">
           <div class="vital-top"><span class="vital-title">Interwal RR</span></div>
@@ -1533,12 +1896,12 @@
         <div class="vital-card">
           <div class="vital-top"><span class="vital-title">HRV Status RMSSD</span></div>
           <div class="vital-value-row"><span class="vital-val" id="tel-val-hrv">${v.hrv || 64}</span><span class="vital-unit">ms</span></div>
-          <div class="vital-norm">Status zrownowazony: 50 - 80 ms</div>
+          <div class="vital-norm">Status zrownowazony: 45 - 80 ms</div>
         </div>
         <div class="vital-card">
           <div class="vital-top"><span class="vital-title">Saturacja tlenowa SpO2</span></div>
           <div class="vital-value-row"><span class="vital-val" id="tel-val-spo2">${v.spo2}</span><span class="vital-unit">${v.spo2Unit}</span></div>
-          <div class="vital-norm">Wymagane na ISS: 97 - 100 %</div>
+          <div class="vital-norm">Wymagane na ISS: 96 - 100 %</div>
         </div>
         <div class="vital-card">
           <div class="vital-top"><span class="vital-title">Czestosc oddechowa</span></div>
@@ -1548,17 +1911,27 @@
         <div class="vital-card">
           <div class="vital-top"><span class="vital-title">Poziom stresu</span></div>
           <div class="vital-value-row"><span class="vital-val" id="tel-val-stress">${v.stressLevel}</span><span class="vital-unit">pkt</span></div>
-          <div class="vital-norm">Skala 0 - 100 pkt</div>
+          <div class="vital-norm">Norma: 0 - 50 pkt</div>
         </div>
         <div class="vital-card">
           <div class="vital-top"><span class="vital-title">Rezerwa Body Battery</span></div>
           <div class="vital-value-row"><span class="vital-val" id="tel-val-bb">${v.bodyBattery || 82}</span><span class="vital-unit">pkt</span></div>
-          <div class="vital-norm">Bilans energii organizmu</div>
+          <div class="vital-norm">Minimum: powyzej 50 pkt</div>
         </div>
         <div class="vital-card">
           <div class="vital-top"><span class="vital-title">Temperatura powloki</span></div>
           <div class="vital-value-row"><span class="vital-val" id="tel-val-temp">${v.temp}</span><span class="vital-unit">${v.tempUnit}</span></div>
-          <div class="vital-norm">Norma: 36.4 - 37.2 st. C</div>
+          <div class="vital-norm">Norma: 36.2 - 37.3 st. C</div>
+        </div>
+        <div class="vital-card">
+          <div class="vital-top"><span class="vital-title">Kortyzol i mleczany w pocie</span></div>
+          <div class="vital-value-row"><span class="vital-val" id="tel-val-bio">${v.cortisol !== undefined ? v.cortisol : 4.2} / ${v.lactate !== undefined ? v.lactate : 1.6}</span><span class="vital-unit">ng/ml | mmol/l</span></div>
+          <div class="vital-norm">Limity: ponizej 6.5 i 2.5</div>
+        </div>
+        <div class="vital-card">
+          <div class="vital-top"><span class="vital-title">Gotowosc EEG i Sleep Score</span></div>
+          <div class="vital-value-row"><span class="vital-val" id="tel-val-eeg">${v.cognitiveReadiness !== undefined ? v.cognitiveReadiness : 90}% / ${v.sleepScore !== undefined ? v.sleepScore : 85}</span><span class="vital-unit">pkt</span></div>
+          <div class="vital-norm">Progi: powyzej 75% i 80 pkt</div>
         </div>
         <div class="vital-card">
           <div class="vital-top"><span class="vital-title">Dawka pochlonieta</span></div>
@@ -2852,8 +3225,29 @@
             </div>
 
             <div class="form-group">
+              <label for="entry-sleep-score" class="form-label">Sleep Score: pkt</label>
+              <input type="number" id="entry-sleep-score" class="form-input" min="10" max="100" value="88" required />
+            </div>
+
+            <div class="form-group">
+              <label for="entry-cortisol" class="form-label">Kortyzol w pocie: ng/ml</label>
+              <input type="number" id="entry-cortisol" class="form-input" min="1.0" max="30.0" step="0.1" value="4.2" required />
+            </div>
+
+            <div class="form-group">
+              <label for="entry-lactate" class="form-label">Mleczany w pocie: mmol/l</label>
+              <input type="number" id="entry-lactate" class="form-input" min="0.5" max="12.0" step="0.1" value="1.6" required />
+            </div>
+
+            <div class="form-group">
+              <label for="entry-eeg" class="form-label">Gotowosc poznawcza EEG: procent</label>
+              <input type="number" id="entry-eeg" class="form-input" min="20" max="100" value="92" required />
+            </div>
+
+            <div class="form-group">
               <label for="entry-status" class="form-label">Ocena ogolna stanu:</label>
               <select id="entry-status" class="form-input">
+                <option value="auto" selected>Ocena automatyczna modelu ML</option>
                 <option value="normal">Stan stabilny</option>
                 <option value="warning">Wymagana obserwacja</option>
                 <option value="critical">Podwyzszone ryzyko</option>
@@ -2865,7 +3259,7 @@
             <button type="submit" class="btn btn-primary">
               Zapisz pomiar telemetryczny do bazy
             </button>
-            <span id="telemetry-save-feedback" class="feedback-inline" style="display: none;">Pomiar zostal pomyslnie zarejestrowany.</span>
+            <span id="telemetry-save-feedback" class="feedback-inline" style="display: none;">Pomiar zostal pomyslnie zarejestrowany i przeliczony przez model.</span>
           </div>
         </form>
         ` : `
@@ -2894,7 +3288,19 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ mode: 'real' })
-            }).catch(function() {});
+            })
+              .then(function(r) { return r.json(); })
+              .then(function(res) {
+                if (res && res.success) {
+                  if (res.users) appState.users = res.users;
+                  if (res.astronauts) appState.astronauts = res.astronauts;
+                  if (res.crewSummary) appState.crewSummary = res.crewSummary;
+                  sanitizeCrewState(appState);
+                  saveState(appState);
+                  renderApp();
+                }
+              })
+              .catch(function() {});
           }
           saveState(appState);
           renderApp();
@@ -2920,7 +3326,19 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ mode: 'demo' })
-            }).catch(function() {});
+            })
+              .then(function(r) { return r.json(); })
+              .then(function(res) {
+                if (res && res.success) {
+                  if (res.users) appState.users = res.users;
+                  if (res.astronauts) appState.astronauts = res.astronauts;
+                  if (res.crewSummary) appState.crewSummary = res.crewSummary;
+                  sanitizeCrewState(appState);
+                  saveState(appState);
+                  renderApp();
+                }
+              })
+              .catch(function() {});
           }
           saveState(appState);
           renderApp();
@@ -2940,6 +3358,26 @@
           appState.users = JSON.parse(JSON.stringify(DEMO_USERS));
           appState.astronauts = JSON.parse(JSON.stringify(DEMO_ASTRONAUTS));
           appState.currentUser = null;
+          if (window.location.protocol.indexOf('http') === 0) {
+            fetch('/api/mission/reset', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ target: 'demo' })
+            })
+              .then(function(r) { return r.json(); })
+              .then(function(res) {
+                if (res && res.success) {
+                  appState.users = res.users || appState.users;
+                  appState.astronauts = res.astronauts || appState.astronauts;
+                  if (res.eclssCabin) appState.eclssCabin = res.eclssCabin;
+                  if (res.crewSummary) appState.crewSummary = res.crewSummary;
+                  sanitizeCrewState(appState);
+                  saveState(appState);
+                  renderApp();
+                }
+              })
+              .catch(function() {});
+          }
           saveState(appState);
           renderApp();
         }
@@ -2960,6 +3398,25 @@
           appState.realUsers = JSON.parse(JSON.stringify(appState.users));
           appState.realAstronauts = [];
           appState.currentUser = null;
+          if (window.location.protocol.indexOf('http') === 0) {
+            fetch('/api/mission/reset', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ target: 'clear' })
+            })
+              .then(function(r) { return r.json(); })
+              .then(function(res) {
+                if (res && res.success) {
+                  appState.users = res.users || appState.users;
+                  appState.astronauts = res.astronauts || [];
+                  if (res.crewSummary) appState.crewSummary = res.crewSummary;
+                  sanitizeCrewState(appState);
+                  saveState(appState);
+                  renderApp();
+                }
+              })
+              .catch(function() {});
+          }
           saveState(appState);
           renderApp();
         }
@@ -2984,6 +3441,17 @@
         if (confirmed) {
           appState.users = appState.users.filter(function(u) { return u.id !== uid; });
           appState.astronauts = appState.astronauts.filter(function(a) { return a.id !== uid; });
+          if (window.location.protocol.indexOf('http') === 0) {
+            fetch('/api/astronauts/' + encodeURIComponent(uid), { method: 'DELETE' })
+              .then(function(r) { return r.json(); })
+              .then(function(res) {
+                if (res && res.crewSummary) {
+                  appState.crewSummary = res.crewSummary;
+                  saveState(appState);
+                }
+              })
+              .catch(function() {});
+          }
           saveState(appState);
           renderUstawienia();
         }
@@ -3024,7 +3492,15 @@
           document.getElementById('entry-stress').value = v.stressLevel;
           document.getElementById('entry-bone').value = v.boneDensity;
           document.getElementById('entry-muscle').value = v.muscleMass;
-          document.getElementById('entry-status').value = targetAstro.overallStatus;
+          const ssEl = document.getElementById('entry-sleep-score');
+          if (ssEl) ssEl.value = v.sleepScore !== undefined ? v.sleepScore : 88;
+          const coEl = document.getElementById('entry-cortisol');
+          if (coEl) coEl.value = v.cortisol !== undefined ? v.cortisol : 4.2;
+          const laEl = document.getElementById('entry-lactate');
+          if (laEl) laEl.value = v.lactate !== undefined ? v.lactate : 1.6;
+          const egEl = document.getElementById('entry-eeg');
+          if (egEl) egEl.value = v.cognitiveReadiness !== undefined ? v.cognitiveReadiness : 92;
+          document.getElementById('entry-status').value = 'auto';
         }
       });
     }
@@ -3048,10 +3524,14 @@
         const stress = parseInt(document.getElementById('entry-stress').value, 10);
         const bone = parseInt(document.getElementById('entry-bone').value, 10);
         const muscle = parseInt(document.getElementById('entry-muscle').value, 10);
-        const status = document.getElementById('entry-status').value;
+        const sleepScore = parseInt(document.getElementById('entry-sleep-score').value, 10);
+        const cortisol = parseFloat(document.getElementById('entry-cortisol').value);
+        const lactate = parseFloat(document.getElementById('entry-lactate').value);
+        const cognitiveReadiness = parseInt(document.getElementById('entry-eeg').value, 10);
+        const statusChoice = document.getElementById('entry-status').value;
 
-        // Aktualizacja vitals
         targetAstro.vitals.hr = hr;
+        targetAstro.vitals.rr = Math.round(60000 / Math.max(hr, 30));
         targetAstro.vitals.bpSys = bpSys;
         targetAstro.vitals.bpDia = bpDia;
         targetAstro.vitals.spo2 = spo2;
@@ -3061,24 +3541,28 @@
         targetAstro.vitals.stressLevel = stress;
         targetAstro.vitals.boneDensity = bone;
         targetAstro.vitals.muscleMass = muscle;
+        targetAstro.vitals.sleepScore = sleepScore;
+        targetAstro.vitals.cortisol = cortisol;
+        targetAstro.vitals.lactate = lactate;
+        targetAstro.vitals.cognitiveReadiness = cognitiveReadiness;
 
-        targetAstro.overallStatus = status;
-        if (status === 'normal') {
+        if (statusChoice === 'normal') {
+          targetAstro.overallStatus = 'normal';
           targetAstro.statusLabel = 'Stan stabilny';
           targetAstro.statusDescription = 'Wszystkie biometryczne wskazniki pozostaja w zdefiniowanym korytarzu bezpieczenstwa.';
-        } else if (status === 'warning') {
+        } else if (statusChoice === 'warning') {
+          targetAstro.overallStatus = 'warning';
           targetAstro.statusLabel = 'Wymagana obserwacja';
           targetAstro.statusDescription = 'Zanotowano odchylenie parametrow fizjologicznych od normy bazowej.';
-        } else {
+        } else if (statusChoice === 'critical') {
+          targetAstro.overallStatus = 'critical';
           targetAstro.statusLabel = 'Podwyzszone ryzyko';
           targetAstro.statusDescription = 'Wskazniki wymagaja natychmiastowej uwagi personelu medycznego misji.';
         }
 
-        // Dodanie punktu do historii
         const historyLen = targetAstro.telemetryHistory.length;
-        const newDayLabel = 'Dzien ' + (184 + historyLen);
         targetAstro.telemetryHistory.push({
-          day: newDayLabel,
+          day: 'Dzien ' + (184 + historyLen),
           hr: hr,
           bpSys: bpSys,
           spo2: spo2,
@@ -3086,12 +3570,56 @@
           rad: rad
         });
 
-        saveState(appState);
+        const showSaved = function() {
+          const feedback = document.getElementById('telemetry-save-feedback');
+          if (feedback) {
+            feedback.style.display = 'inline-block';
+            setTimeout(function() { feedback.style.display = 'none'; }, 3500);
+          }
+        };
 
-        const feedback = document.getElementById('telemetry-save-feedback');
-        if (feedback) {
-          feedback.style.display = 'inline-block';
-          setTimeout(function() { feedback.style.display = 'none'; }, 3500);
+        if (window.location.protocol.indexOf('http') === 0) {
+          const payload = {
+            astroId: targetId,
+            hr: hr,
+            bpSys: bpSys,
+            bpDia: bpDia,
+            spo2: spo2,
+            temp: temp,
+            resp: resp,
+            radDose: rad,
+            stressLevel: stress,
+            boneDensity: bone,
+            muscleMass: muscle,
+            sleepScore: sleepScore,
+            cortisol: cortisol,
+            lactate: lactate,
+            cognitiveReadiness: cognitiveReadiness
+          };
+          if (statusChoice !== 'auto') payload.overallStatus = statusChoice;
+          fetch('/api/telemetry/entry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+              if (res && res.success && res.astronaut) {
+                const idx = appState.astronauts.findIndex(function(a) { return a.id === targetId; });
+                if (idx !== -1) appState.astronauts[idx] = res.astronaut;
+                if (res.crewSummary) appState.crewSummary = res.crewSummary;
+                sanitizeCrewState(appState);
+                saveState(appState);
+              }
+              showSaved();
+            })
+            .catch(function() {
+              saveState(appState);
+              showSaved();
+            });
+        } else {
+          saveState(appState);
+          showSaved();
         }
       });
     }
@@ -3121,13 +3649,13 @@
               </div>
 
               <div class="form-group">
-                <label for="new-astro-role" class="form-label">Rola pokladowa w misji:</label>
-                <input type="text" id="new-astro-role" class="form-input" placeholder="Na przyklad: Inzynier systemow lacznosci" required />
+                <label for="new-astro-role" class="form-label">Rola opcjonalna:</label>
+                <input type="text" id="new-astro-role" class="form-input" placeholder="Opcjonalnie" />
               </div>
 
               <div class="form-group">
-                <label for="new-astro-title" class="form-label">Tytul specjalistyczny:</label>
-                <input type="text" id="new-astro-title" class="form-input" placeholder="Na przyklad: Operator radaru orbitalnego" required />
+                <label for="new-astro-title" class="form-label">Tytul opcjonalny:</label>
+                <input type="text" id="new-astro-title" class="form-input" placeholder="Opcjonalnie" />
               </div>
 
               <div class="form-group">
@@ -3241,7 +3769,6 @@
 
       const errEl = document.getElementById('add-astro-error');
 
-      // Sprawdzenie czy login juz istnieje
       const loginExists = appState.users.some(function(u) {
         return u.login.toLowerCase() === login.toLowerCase();
       });
@@ -3252,80 +3779,113 @@
         return;
       }
 
-      const newId = (type === 'kierownik' ? 'kierownik-' : 'astro-') + Date.now();
-      const initials = extractInitials(name);
+      const hr = parseInt(document.getElementById('new-astro-hr').value, 10) || 72;
+      const bpSys = parseInt(document.getElementById('new-astro-bp-sys').value, 10) || 120;
+      const bpDia = parseInt(document.getElementById('new-astro-bp-dia').value, 10) || 80;
+      const spo2 = parseInt(document.getElementById('new-astro-spo2').value, 10) || 99;
+      const temp = parseFloat(document.getElementById('new-astro-temp').value) || 36.6;
+      const resp = parseInt(document.getElementById('new-astro-resp').value, 10) || 14;
 
-      const newUser = {
-        id: newId,
-        login: login,
-        password: pass,
-        name: name,
-        role: role,
-        title: title,
-        accessLevel: type === 'kierownik' ? 'Nadzor pelny' : 'Konto osobiste',
-        avatarCode: initials
+      const applyLocalCreate = function() {
+        const newId = (type === 'kierownik' ? 'kierownik-' : 'astro-') + Date.now();
+        const initials = extractInitials(name);
+        const newUser = {
+          id: newId,
+          login: login,
+          password: pass,
+          name: name,
+          role: type === 'kierownik' ? (role || 'Kierownik') : '',
+          title: '',
+          accessLevel: type === 'kierownik' ? 'Nadzor pelny' : 'Konto osobiste',
+          avatarCode: initials
+        };
+        appState.users.push(newUser);
+        if (type === 'astro') {
+          appState.astronauts.push({
+            id: newId,
+            name: name,
+            role: '',
+            avatarCode: initials,
+            age: age,
+            bloodType: blood,
+            missionDay: 184,
+            evaHours: 0,
+            overallStatus: 'normal',
+            statusLabel: 'Stan stabilny',
+            statusDescription: 'Nowo przyjety czlonek zalogi. Parametry bazowe wprowadzone do systemu.',
+            vitals: {
+              hr: hr, hrUnit: 'bpm',
+              rr: Math.round(60000 / Math.max(hr, 30)), rrUnit: 'ms',
+              hrv: 65, hrvUnit: 'ms',
+              bpSys: bpSys, bpDia: bpDia, bpUnit: 'mmHg',
+              spo2: spo2, spo2Unit: '%',
+              temp: temp, tempUnit: 'st. C',
+              resp: resp, respUnit: 'oddech/min',
+              radDose: 0.5, radUnit: 'mSv',
+              boneDensity: 100, boneUnit: '% normy',
+              muscleMass: 100, muscleUnit: '% normy',
+              hydration: 98, hydrationUnit: '%',
+              sleepHours: 8.0, sleepUnit: 'godz.',
+              sleepScore: 88, sleepScoreUnit: 'pkt',
+              stressLevel: 15, stressUnit: 'pkt',
+              bodyBattery: 90, bodyBatteryUnit: 'pkt',
+              cortisol: 4.0, cortisolUnit: 'ng/ml',
+              lactate: 1.5, lactateUnit: 'mmol/l',
+              cognitiveReadiness: 92, cognitiveUnit: '%'
+            },
+            telemetryHistory: [
+              { day: 'Dzien 184', hr: hr, bpSys: bpSys, spo2: spo2, stress: 15, rad: 0.5 }
+            ],
+            orders: [],
+            dailyChecks: []
+          });
+        }
+        saveState(appState);
+        closeModal();
+        renderApp();
       };
 
-      appState.users.push(newUser);
-
-      if (type === 'astro') {
-        const hr = parseInt(document.getElementById('new-astro-hr').value, 10) || 72;
-        const bpSys = parseInt(document.getElementById('new-astro-bp-sys').value, 10) || 120;
-        const bpDia = parseInt(document.getElementById('new-astro-bp-dia').value, 10) || 80;
-        const spo2 = parseInt(document.getElementById('new-astro-spo2').value, 10) || 99;
-        const temp = parseFloat(document.getElementById('new-astro-temp').value) || 36.6;
-        const resp = parseInt(document.getElementById('new-astro-resp').value, 10) || 14;
-
-        const newAstro = {
-          id: newId,
-          name: name,
-          role: role,
-          avatarCode: initials,
-          age: age,
-          bloodType: blood,
-          missionDay: 184,
-          evaHours: 0,
-          overallStatus: 'normal',
-          statusLabel: 'Stan stabilny',
-          statusDescription: 'Nowo przyjety czlonek zalogi. Parametry bazowe wprowadzone do systemu.',
-          vitals: {
+      if (window.location.protocol.indexOf('http') === 0) {
+        fetch('/api/astronauts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: name,
+            role: role,
+            title: title,
+            type: type,
+            login: login,
+            password: pass,
+            age: age,
+            bloodType: blood,
             hr: hr,
-            hrUnit: 'bpm',
             bpSys: bpSys,
             bpDia: bpDia,
-            bpUnit: 'mmHg',
             spo2: spo2,
-            spo2Unit: '%',
             temp: temp,
-            tempUnit: 'st. C',
-            resp: resp,
-            respUnit: 'oddech/min',
-            radDose: 0.5,
-            radUnit: 'mSv',
-            boneDensity: 100,
-            boneUnit: '% normy',
-            muscleMass: 100,
-            muscleUnit: '% normy',
-            hydration: 98,
-            hydrationUnit: '%',
-            sleepHours: 8.0,
-            sleepUnit: 'godz.',
-            stressLevel: 15,
-            stressUnit: '%'
-          },
-          telemetryHistory: [
-            { day: 'Dzien 184', hr: hr, bpSys: bpSys, spo2: spo2, stress: 15, rad: 0.5 }
-          ],
-          orders: [],
-          dailyChecks: []
-        };
-
-        appState.astronauts.push(newAstro);
+            resp: resp
+          })
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(res) {
+            if (res && res.success) {
+              if (res.user) appState.users.push(res.user);
+              if (res.astronaut) appState.astronauts.push(res.astronaut);
+              if (res.crewSummary) appState.crewSummary = res.crewSummary;
+              sanitizeCrewState(appState);
+              saveState(appState);
+              closeModal();
+              renderApp();
+            } else {
+              applyLocalCreate();
+            }
+          })
+          .catch(function() {
+            applyLocalCreate();
+          });
+      } else {
+        applyLocalCreate();
       }
-
-      saveState(appState);
-      closeModal();
-      renderApp();
     });
 
     enforceConstraints(modalBackdrop);
@@ -3471,17 +4031,22 @@
             .then(function(data) {
               if (data && data.success) {
                 appState.astronauts.unshift(data.astronaut);
-                appState.users.push({
+                appState.users.push(data.user || {
                   id: data.astronaut.id,
                   login: 'garmin',
                   password: 'kosmos2026',
                   name: data.astronaut.name,
-                  role: data.astronaut.role,
-                  title: 'Operator sensora biometrycznego',
+                  role: '',
+                  title: '',
                   accessLevel: 'Konto osobiste',
                   avatarCode: data.astronaut.avatarCode
                 });
+                if (data.crewSummary) appState.crewSummary = data.crewSummary;
+                sanitizeCrewState(appState);
+                saveState(appState);
                 renderApp();
+              } else if (data && data.error) {
+                window.alert(data.error);
               }
             })
             .catch(function() {
@@ -3503,8 +4068,8 @@
           login: 'garmin',
           password: 'kosmos2026',
           name: garminAstro.name,
-          role: garminAstro.role,
-          title: 'Operator sensora biometrycznego',
+          role: '',
+          title: '',
           accessLevel: 'Konto osobiste',
           avatarCode: garminAstro.avatarCode
         };
@@ -3556,6 +4121,20 @@
       const container = document.getElementById('app-main');
       if (!container) return;
 
+      const eclss = (data && data.eclssCabin) ? data.eclssCabin : (appState.eclssCabin || {});
+      const setElText = function(id, text) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+      };
+      if (eclss.temp !== undefined) setElText('eclss-temp', eclss.temp + ' st. C');
+      if (eclss.pressure !== undefined) setElText('eclss-pressure', eclss.pressure + ' kPa');
+      if (eclss.humidity !== undefined) setElText('eclss-humidity', eclss.humidity + ' %');
+      if (eclss.o2 !== undefined) setElText('eclss-o2', eclss.o2 + ' %');
+      if (eclss.co2 !== undefined) setElText('eclss-co2', eclss.co2 + ' ppm');
+      if (eclss.dailyRadiation !== undefined) setElText('eclss-rad', eclss.dailyRadiation + ' mGy/d');
+      if (eclss.waterTanks !== undefined) setElText('eclss-water', eclss.waterTanks + ' %');
+      if (eclss.sourceTime) setElText('eclss-source-tag', sanitizeModelText(eclss.sourceTime));
+
       let normalCount = 0;
       let warningCount = 0;
       let criticalCount = 0;
@@ -3596,7 +4175,15 @@
           }
           const descEl = cardEl.querySelector('.astro-card-desc');
           if (descEl) {
-            descEl.textContent = a.statusDescription;
+            descEl.textContent = sanitizeModelText(a.statusDescription);
+          }
+
+          const ms = a.modelSummary || null;
+          const modelValEl = cardEl.querySelector('.metric-val-model');
+          if (modelValEl) {
+            const msIndeks = (ms && ms.ogolny && ms.ogolny.indeks !== null && ms.ogolny.indeks !== undefined) ? Math.round(ms.ogolny.indeks) + '/100' : '--';
+            const msAnom = (ms && ms.anomalia && ms.anomalia.wynik !== null && ms.anomalia.wynik !== undefined) ? Math.round(ms.anomalia.wynik) + '/100' : '--';
+            modelValEl.textContent = 'Indeks ' + msIndeks + ' | Anomalia ' + msAnom;
           }
 
           const hrVal = cardEl.querySelector('.metric-val-hr');
@@ -3623,14 +4210,15 @@
             spo2Val.classList.add(flashClass);
           }
 
-          const radVal = cardEl.querySelector('.metric-val-rad');
-          if (radVal) {
-            radVal.textContent = a.vitals.radDose + ' ' + a.vitals.radUnit;
-          }
+          const hrvVal = cardEl.querySelector('.metric-val-hrv');
+          if (hrvVal) hrvVal.textContent = (a.vitals.hrv || 64) + ' ms';
+
+          const respVal = cardEl.querySelector('.metric-val-resp');
+          if (respVal) respVal.textContent = a.vitals.resp + ' oddech/min';
 
           const stressVal = cardEl.querySelector('.metric-val-stress');
           if (stressVal) {
-            stressVal.textContent = a.vitals.stressLevel + ' ' + a.vitals.stressUnit;
+            stressVal.textContent = a.vitals.stressLevel + ' pkt / BB ' + (a.vitals.bodyBattery || 80) + ' pkt';
             stressVal.classList.remove('val-updated');
             void stressVal.offsetWidth;
             stressVal.classList.add('val-updated');
@@ -3638,77 +4226,102 @@
         }
       });
 
-      const statTotal = document.getElementById('stat-count-total');
-      if (statTotal) statTotal.textContent = totalAstro;
-
-      const statNormal = document.getElementById('stat-count-normal');
-      if (statNormal) statNormal.textContent = normalCount;
-
-      const statWarning = document.getElementById('stat-count-warning');
-      if (statWarning) statWarning.textContent = warningCount;
-
-      const statCritical = document.getElementById('stat-count-critical');
-      if (statCritical) statCritical.textContent = criticalCount;
+      setElText('stat-count-total', totalAstro);
+      setElText('stat-count-normal', normalCount);
+      setElText('stat-count-warning', warningCount);
+      setElText('stat-count-critical', criticalCount);
 
       const alertBox = document.getElementById('dashboard-alert-box');
       const alertText = document.getElementById('dashboard-alert-text');
       if (alertBox && alertText) {
-        if (criticalCount > 0) {
-          alertBox.className = 'alert-banner-box banner-critical';
+        if (criticalCount > 0) alertBox.className = 'alert-banner-box banner-critical';
+        else if (warningCount > 0) alertBox.className = 'alert-banner-box banner-warning';
+        else alertBox.className = 'alert-banner-box banner-info';
+
+        if (appState.crewSummary && appState.crewSummary.summaryText) {
+          alertText.textContent = sanitizeModelText(appState.crewSummary.summaryText);
+        } else if (criticalCount > 0) {
           alertText.textContent = 'Zanotowano podwyzszone ryzyko kardiologiczne u czlonka zalogi. Zaleca sie bezzwloczne wdrozenie protokolu interwencji.';
         } else if (warningCount > 0) {
-          alertBox.className = 'alert-banner-box banner-warning';
           alertText.textContent = 'Parametry biometryczne jednego z astronautow wymagaja wzmozonego monitorowania.';
         } else if (totalAstro === 0) {
-          alertBox.className = 'alert-banner-box banner-info';
           alertText.textContent = 'Brak aktywnej zalogi w misji. Przejdz do zakladki Ustawienia aby dodac personel orbitalny.';
         } else {
-          alertBox.className = 'alert-banner-box banner-info';
           alertText.textContent = 'Wszyscy monitorowani astronauci utrzymuja zadowalajaca rownowage fizjologiczna.';
         }
+      }
+
+      const crewModelPanel = document.getElementById('crew-model-summary-panel');
+      if (crewModelPanel) {
+        crewModelPanel.innerHTML = renderCrewModelSummaryInnerHtml(appState.crewSummary, appState.astronauts, eclss);
       }
 
       const avgHr = totalAstro > 0 ? Math.round(totalHr / totalAstro) : 0;
       const avgSpo2 = totalAstro > 0 ? Math.round(totalSpo2 / totalAstro) : 0;
       const avgRad = totalAstro > 0 ? Math.round((totalRad / totalAstro) * 10) / 10 : 0;
 
-      const aggHrEl = document.getElementById('agg-val-hr');
-      if (aggHrEl) aggHrEl.textContent = avgHr + ' bpm';
-
-      const aggSpo2El = document.getElementById('agg-val-spo2');
-      if (aggSpo2El) aggSpo2El.textContent = avgSpo2 + ' %';
-
-      const aggRadEl = document.getElementById('agg-val-rad');
-      if (aggRadEl) aggRadEl.textContent = avgRad + ' mSv';
+      setElText('agg-val-hr', avgHr + ' bpm');
+      setElText('agg-val-spo2', avgSpo2 + ' %');
+      setElText('agg-val-rad', avgRad + ' mSv');
 
       TelemetryCharts.renderCrewComparison('crew-hr-chart', appState.astronauts, 'hr', 'Tetno', 'bpm');
       TelemetryCharts.renderCrewComparison('crew-stress-chart', appState.astronauts, 'stressLevel', 'Poziom stresu', '%');
+      enforceConstraints(container);
     }
 
     if (activeTab === 'pulpit' && !isCommander()) {
       const currentAstro = getAstronautById(appState.currentUser);
       if (currentAstro && currentAstro.vitals) {
         const v = currentAstro.vitals;
-        const hrEl = document.getElementById('astro-sensor-hr');
-        if (hrEl) hrEl.textContent = v.hr;
-        const bpEl = document.getElementById('astro-sensor-bp');
-        if (bpEl) bpEl.textContent = v.bpSys + ' na ' + v.bpDia;
-        const spo2El = document.getElementById('astro-sensor-spo2');
-        if (spo2El) spo2El.textContent = v.spo2;
-        const tempEl = document.getElementById('astro-sensor-temp');
-        if (tempEl) tempEl.textContent = v.temp;
-        const respEl = document.getElementById('astro-sensor-resp');
-        if (respEl) respEl.textContent = v.resp;
-        const rrEl = document.getElementById('astro-sensor-rr');
-        if (rrEl) rrEl.textContent = (v.rr || Math.round(60000 / v.hr));
-        const hrvEl = document.getElementById('astro-sensor-hrv');
-        if (hrvEl) hrvEl.textContent = (v.hrv || 64);
-        const stressEl = document.getElementById('astro-sensor-stress');
-        if (stressEl) stressEl.textContent = v.stressLevel;
-        const bbEl = document.getElementById('astro-sensor-bb');
-        if (bbEl) bbEl.textContent = (v.bodyBattery || 82);
-        const radEl = document.getElementById('astro-sensor-rad');
-        if (radEl) radEl.textContent = v.radDose;
+        const setVal = function(id, txt) {
+          const el = document.getElementById(id);
+          if (el) el.textContent = txt;
+        };
+        setVal('astro-sensor-hr', v.hr);
+        setVal('astro-sensor-bp', v.bpSys + ' na ' + v.bpDia);
+        setVal('astro-sensor-spo2', v.spo2);
+        setVal('astro-sensor-temp', v.temp);
+        setVal('astro-sensor-resp', v.resp);
+        setVal('astro-sensor-rr', (v.rr || Math.round(60000 / v.hr)));
+        setVal('astro-sensor-hrv', (v.hrv || 64));
+        setVal('astro-sensor-stress', v.stressLevel);
+        setVal('astro-sensor-bb', (v.bodyBattery || 82));
+        setVal('astro-sensor-sleep-score', (v.sleepScore !== undefined ? v.sleepScore : 85));
+        setVal('astro-sensor-cortisol', (v.cortisol !== undefined ? v.cortisol : 4.2));
+        setVal('astro-sensor-lactate', (v.lactate !== undefined ? v.lactate : 1.6));
+        setVal('astro-sensor-eeg', (v.cognitiveReadiness !== undefined ? v.cognitiveReadiness : 90));
+        setVal('astro-sensor-rad', v.radDose);
+
+        const bannerEl = document.getElementById('astro-status-banner');
+        if (bannerEl) {
+          bannerEl.className = 'astro-overall-status-banner ' + (
+            currentAstro.overallStatus === 'critical' ? 'status-banner-critical' :
+            (currentAstro.overallStatus === 'warning' ? 'status-banner-warning' : 'status-banner-normal')
+          );
+        }
+        const badgeTop = document.getElementById('astro-status-badge-top');
+        const badgeMain = document.getElementById('astro-status-badge-main');
+        [badgeTop, badgeMain].forEach(function(b) {
+          if (b) {
+            b.textContent = currentAstro.statusLabel;
+            b.className = 'status-pill ' + statusBadgeFor(currentAstro.overallStatus);
+          }
+        });
+        setVal('astro-status-headline',
+          currentAstro.overallStatus === 'critical'
+            ? 'OGOLNY STAN ZDROWIA : STAN KRYTYCZNY - WYMAGANA PILNA INTERWENCJA'
+            : (currentAstro.overallStatus === 'warning'
+              ? 'OGOLNY STAN ZDROWIA : WYMAGANA OBSERWACJA - ZANOTOWANO ODCHYLENIA'
+              : 'OGOLNY STAN ZDROWIA : DANE PRAWIDLOWE - BRAK ZAGROZENIA'));
+        setVal('astro-status-subline', sanitizeModelText(currentAstro.statusDescription));
+        setVal('astro-personal-desc', sanitizeModelText(currentAstro.statusDescription));
+
+        const checkEl = document.getElementById('astro-checklist-container');
+        if (checkEl) checkEl.innerHTML = renderChecklistChipsHtml(currentAstro);
+
+        const astroModelPanel = document.getElementById('astro-model-summary-panel');
+        if (astroModelPanel) astroModelPanel.innerHTML = renderModelSummaryInnerHtml(currentAstro);
+        enforceConstraints(document.getElementById('app-main'));
       }
     }
 
@@ -3716,48 +4329,37 @@
       const currentAstro = getAstronautById(selectedAstroId) || appState.astronauts[0];
       if (currentAstro && currentAstro.vitals) {
         const v = currentAstro.vitals;
-        const hrEl = document.getElementById('tel-val-hr');
-        if (hrEl) hrEl.textContent = v.hr + ' ' + v.hrUnit;
-
-        const rrEl = document.getElementById('tel-val-rr');
-        if (rrEl) rrEl.textContent = (v.rr || Math.round(60000 / v.hr));
-
-        const hrvEl = document.getElementById('tel-val-hrv');
-        if (hrvEl) hrvEl.textContent = (v.hrv || 64);
-
-        const bpEl = document.getElementById('tel-val-bp');
-        if (bpEl) bpEl.textContent = v.bpSys + ' / ' + v.bpDia + ' ' + v.bpUnit;
-
-        const spo2El = document.getElementById('tel-val-spo2');
-        if (spo2El) spo2El.textContent = v.spo2 + ' ' + v.spo2Unit;
-
-        const tempEl = document.getElementById('tel-val-temp');
-        if (tempEl) tempEl.textContent = v.temp + ' ' + v.tempUnit;
-
-        const respEl = document.getElementById('tel-val-resp');
-        if (respEl) respEl.textContent = v.resp + ' ' + v.respUnit;
-
-        const stressEl = document.getElementById('tel-val-stress');
-        if (stressEl) stressEl.textContent = v.stressLevel;
-
-        const bbEl = document.getElementById('tel-val-bb');
-        if (bbEl) bbEl.textContent = (v.bodyBattery || 82);
-
-        const radEl = document.getElementById('tel-val-rad');
-        if (radEl) radEl.textContent = v.radDose + ' ' + v.radUnit;
+        const setT = function(id, txt) {
+          const el = document.getElementById(id);
+          if (el) el.textContent = txt;
+        };
+        setT('tel-val-hr', v.hr);
+        setT('tel-val-bp', v.bpSys + ' na ' + v.bpDia);
+        setT('tel-val-rr', (v.rr || Math.round(60000 / v.hr)));
+        setT('tel-val-hrv', (v.hrv || 64));
+        setT('tel-val-spo2', v.spo2);
+        setT('tel-val-temp', v.temp);
+        setT('tel-val-resp', v.resp);
+        setT('tel-val-stress', v.stressLevel);
+        setT('tel-val-bb', (v.bodyBattery || 82));
+        setT('tel-val-bio', (v.cortisol !== undefined ? v.cortisol : 4.2) + ' / ' + (v.lactate !== undefined ? v.lactate : 1.6));
+        setT('tel-val-eeg', (v.cognitiveReadiness !== undefined ? v.cognitiveReadiness : 90) + '% / ' + (v.sleepScore !== undefined ? v.sleepScore : 85));
+        setT('tel-val-rad', v.radDose);
 
         const heroPill = document.getElementById('tel-hero-status-pill');
         if (heroPill) {
           heroPill.textContent = currentAstro.statusLabel;
-          let pillClass = 'badge-normal';
-          if (currentAstro.overallStatus === 'warning') pillClass = 'badge-warning';
-          if (currentAstro.overallStatus === 'critical') pillClass = 'badge-critical';
-          heroPill.className = 'status-pill ' + pillClass;
+          heroPill.className = 'status-pill ' + statusBadgeFor(currentAstro.overallStatus);
         }
 
         const heroDesc = document.getElementById('tel-hero-status-desc');
         if (heroDesc) {
-          heroDesc.textContent = currentAstro.statusDescription;
+          heroDesc.textContent = sanitizeModelText(currentAstro.statusDescription);
+        }
+
+        const telModelPanel = document.getElementById('telemetry-model-summary-panel');
+        if (telModelPanel) {
+          telModelPanel.innerHTML = renderModelSummaryInnerHtml(currentAstro);
         }
 
         const chartPoints = (currentAstro.liveTelemetry && currentAstro.liveTelemetry.length > 0)
@@ -3767,15 +4369,16 @@
         let unit = 'bpm';
         if (activeChartMetric === 'bpSys') { metricLabel = 'Cisnienie skurczowe'; unit = 'mmHg'; }
         else if (activeChartMetric === 'spo2') { metricLabel = 'Saturacja tlenowa'; unit = '%'; }
-        else if (activeChartMetric === 'stressLevel') { metricLabel = 'Poziom stresu'; unit = '%'; }
-        else if (activeChartMetric === 'radDose') { metricLabel = 'Skumulowana radiacja'; unit = 'mSv'; }
+        else if (activeChartMetric === 'stress' || activeChartMetric === 'stressLevel') { metricLabel = 'Poziom stresu'; unit = 'pkt'; }
+        else if (activeChartMetric === 'rad' || activeChartMetric === 'radDose') { metricLabel = 'Skumulowana radiacja'; unit = 'mSv'; }
 
-        TelemetryCharts.renderLineChart('astro-personal-chart', chartPoints, activeChartMetric, metricLabel, unit);
+        TelemetryCharts.renderLineChart('telemetry-detail-chart', chartPoints, activeChartMetric, metricLabel, unit);
 
-        TelemetryCharts.renderRadialGauge('gauge-bone', v.boneDensity, 100, 'Gestosc kosci', '%', '#00d4ff');
-        TelemetryCharts.renderRadialGauge('gauge-muscle', v.muscleMass, 100, 'Masa miesniowa', '%', '#00d4ff');
-        TelemetryCharts.renderRadialGauge('gauge-hydration', v.hydration, 100, 'Poziom nawodnienia', '%', '#00d4ff');
-        TelemetryCharts.renderRadialGauge('gauge-stress', v.stressLevel, 100, 'Poziom obciazenia', '%', v.stressLevel > 70 ? '#ef4444' : '#f59e0b');
+        TelemetryCharts.renderRadialGauge('gauge-bone', v.boneDensity, 100, 'Gestosc kosci', '%', v.boneDensity < 92 ? '#ef4444' : '#00d4ff');
+        TelemetryCharts.renderRadialGauge('gauge-muscle', v.muscleMass, 100, 'Masa miesni', '%', v.muscleMass < 92 ? '#ef4444' : '#00d4ff');
+        TelemetryCharts.renderRadialGauge('gauge-hydration', v.hydration, 100, 'Nawodnienie', '%', v.hydration < 88 ? '#f59e0b' : '#10b981');
+        TelemetryCharts.renderRadialGauge('gauge-stress', v.stressLevel, 100, 'Poziom stresu', '%', v.stressLevel > 60 ? '#ef4444' : '#00d4ff');
+        enforceConstraints(document.getElementById('app-main'));
       }
     }
 
@@ -3798,6 +4401,8 @@
             if (serverState.astronauts) appState.astronauts = serverState.astronauts;
             if (serverState.users) appState.users = serverState.users;
             if (serverState.currentUser) appState.currentUser = serverState.currentUser;
+            if (serverState.eclssCabin) appState.eclssCabin = serverState.eclssCabin;
+            if (serverState.crewSummary) appState.crewSummary = serverState.crewSummary;
             if (serverState.stepProcedures && serverState.stepProcedures.length > 0) appState.stepProcedures = serverState.stepProcedures;
             if (serverState.scheduleData) appState.scheduleData = serverState.scheduleData;
             if (serverState.prophylaxisGuidelines && serverState.prophylaxisGuidelines.length > 0) appState.prophylaxisGuidelines = serverState.prophylaxisGuidelines;

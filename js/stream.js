@@ -223,6 +223,12 @@ const TelemetryStream = (function() {
           if (data.astronauts && appState) {
             appState.astronauts = data.astronauts;
           }
+          if (data.eclssCabin && appState) {
+            appState.eclssCabin = data.eclssCabin;
+          }
+          if (data.crewSummary && appState) {
+            appState.crewSummary = data.crewSummary;
+          }
           listeners.forEach(function(fn) {
             try {
               fn({
@@ -230,7 +236,9 @@ const TelemetryStream = (function() {
                 time: lastPacketTime,
                 scenario: scenario,
                 updatedIds: (data.astronauts || []).map(function(a) { return a.id; }),
-                astronauts: data.astronauts || []
+                astronauts: data.astronauts || [],
+                eclssCabin: data.eclssCabin || (appState ? appState.eclssCabin : null),
+                crewSummary: data.crewSummary || (appState ? appState.crewSummary : null)
               });
             } catch (err) {
               console.warn('Blad w listenerze strumienia telemetrii:', err);
@@ -256,7 +264,9 @@ const TelemetryStream = (function() {
           time: lastPacketTime,
           scenario: scenario,
           updatedIds: updatedIds,
-          astronauts: appState.astronauts
+          astronauts: appState.astronauts,
+          eclssCabin: appState.eclssCabin || null,
+          crewSummary: appState.crewSummary || null
         });
       } catch (err) {
         console.warn('Blad w listenerze strumienia telemetrii:', err);
@@ -336,7 +346,7 @@ const TelemetryStream = (function() {
     return {
       id: id,
       name: 'Marek Kosmonauta',
-      role: 'Specjalista misji : Aparatura Garmin',
+      role: '',
       avatarCode: 'MK',
       age: 34,
       bloodType: '0 Rh plus',
@@ -349,6 +359,10 @@ const TelemetryStream = (function() {
       vitals: {
         hr: 68,
         hrUnit: 'bpm',
+        rr: 882,
+        rrUnit: 'ms',
+        hrv: 66,
+        hrvUnit: 'ms',
         bpSys: 118,
         bpDia: 76,
         bpUnit: 'mmHg',
@@ -368,8 +382,18 @@ const TelemetryStream = (function() {
         hydrationUnit: '%',
         sleepHours: 7.9,
         sleepUnit: 'godz.',
+        sleepScore: 88,
+        sleepScoreUnit: 'pkt',
         stressLevel: 21,
-        stressUnit: '%'
+        stressUnit: 'pkt',
+        bodyBattery: 88,
+        bodyBatteryUnit: 'pkt',
+        cortisol: 4.1,
+        cortisolUnit: 'ng/ml',
+        lactate: 1.5,
+        lactateUnit: 'mmol/l',
+        cognitiveReadiness: 93,
+        cognitiveUnit: '%'
       },
       telemetryHistory: [
         { day: 'Dzien 179', hr: 67, bpSys: 117, spo2: 99, stress: 22, rad: 2.8 },

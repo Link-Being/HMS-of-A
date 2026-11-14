@@ -3,19 +3,61 @@
 # Health Monitoring System of Astronauts
 # Uwaga: brak emotek, brak nawiasow w tekstach, brak dlugich myslnikow
 
+import copy
+import math
 import os
+import pathlib
 import sys
 import json
 import time
 import random
 import threading
 from datetime import datetime, timezone
-from flask import Flask, send_from_directory, jsonify, request
+from flask import Flask, Response, send_from_directory, jsonify, request
+
+from model import Centrum, normy as N, raport_jako_tekst, status_na_ui
 
 app = Flask(__name__, static_folder=".")
 
 state_lock = threading.Lock()
 stop_event = threading.Event()
+
+BASE_DIR = pathlib.Path(__file__).resolve().parent
+DANE_DIR = BASE_DIR / "dane"
+PLIK_SIECI = DANE_DIR / "anomalie.json"
+OSDR_FILE = DANE_DIR / "osdr_RR1.json"
+BAZA_STACJI_FILE = DANE_DIR / "baza_stacji.json"
+BAZY_OSOBISTE_DIR = DANE_DIR / "bazy_osobiste"
+
+
+def _load_json_safe(path: pathlib.Path, default):
+    if not path.exists():
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default
+
+
+OSDR_RECORDS = _load_json_safe(OSDR_FILE, {}).get("telemetria", [])
+STATION_BASELINE = _load_json_safe(BAZA_STACJI_FILE, {})
+osdr_cursor = {"idx": 0}
+
+
+def build_initial_eclss() -> dict:
+    """Buduje poczatkowy stan srodowiska kabiny z realnych danych ISS OSDR oraz bazy stacji."""
+    rec = OSDR_RECORDS[0] if OSDR_RECORDS else {}
+    rad_base = float(STATION_BASELINE.get("promieniowanie_dobowe", {}).get("sr", 0.21))
+    return {
+        "temp": round(float(rec.get("temperature_iss", 24.1)), 1),
+        "pressure": 101.3,
+        "humidity": int(round(float(rec.get("humidity_iss", 39.0)))),
+        "o2": 20.9,
+        "co2": int(round(float(rec.get("co2_iss", 2641.0)))),
+        "waterTanks": 94,
+        "dailyRadiation": round(rad_base, 2),
+        "sourceTime": rec.get("time", "OSDR RR-1")
+    }
 
 # Konta uzytkownikow w trybie demonstracyjnym
 DEMO_USERS = [
@@ -109,7 +151,11 @@ DEMO_ASTRONAUTS = [
             "boneDensity": 97, "boneUnit": "% normy",
             "muscleMass": 98, "muscleUnit": "% normy",
             "hydration": 95, "hydrationUnit": "%",
-            "sleepHours": 7.8, "sleepUnit": "godz."
+            "sleepHours": 7.8, "sleepUnit": "godz.",
+            "sleepScore": 88, "sleepScoreUnit": "pkt",
+            "cortisol": 4.2, "cortisolUnit": "ng/ml",
+            "lactate": 1.8, "lactateUnit": "mmol/l",
+            "cognitiveReadiness": 92, "cognitiveUnit": "%"
         },
         "periodicTests": [
             {
@@ -238,7 +284,11 @@ DEMO_ASTRONAUTS = [
             "boneDensity": 98, "boneUnit": "% normy",
             "muscleMass": 97, "muscleUnit": "% normy",
             "hydration": 96, "hydrationUnit": "%",
-            "sleepHours": 8.0, "sleepUnit": "godz."
+            "sleepHours": 8.0, "sleepUnit": "godz.",
+            "sleepScore": 92, "sleepScoreUnit": "pkt",
+            "cortisol": 3.8, "cortisolUnit": "ng/ml",
+            "lactate": 1.4, "lactateUnit": "mmol/l",
+            "cognitiveReadiness": 95, "cognitiveUnit": "%"
         },
         "periodicTests": [
             {
@@ -367,7 +417,11 @@ DEMO_ASTRONAUTS = [
             "boneDensity": 94, "boneUnit": "% normy",
             "muscleMass": 93, "muscleUnit": "% normy",
             "hydration": 89, "hydrationUnit": "%",
-            "sleepHours": 5.6, "sleepUnit": "godz."
+            "sleepHours": 5.6, "sleepUnit": "godz.",
+            "sleepScore": 64, "sleepScoreUnit": "pkt",
+            "cortisol": 8.6, "cortisolUnit": "ng/ml",
+            "lactate": 2.9, "lactateUnit": "mmol/l",
+            "cognitiveReadiness": 74, "cognitiveUnit": "%"
         },
         "periodicTests": [
             {
@@ -496,7 +550,11 @@ DEMO_ASTRONAUTS = [
             "boneDensity": 89, "boneUnit": "% normy",
             "muscleMass": 88, "muscleUnit": "% normy",
             "hydration": 85, "hydrationUnit": "%",
-            "sleepHours": 4.2, "sleepUnit": "godz."
+            "sleepHours": 4.2, "sleepUnit": "godz.",
+            "sleepScore": 46, "sleepScoreUnit": "pkt",
+            "cortisol": 15.2, "cortisolUnit": "ng/ml",
+            "lactate": 4.1, "lactateUnit": "mmol/l",
+            "cognitiveReadiness": 58, "cognitiveUnit": "%"
         },
         "periodicTests": [
             {
@@ -625,7 +683,11 @@ DEMO_ASTRONAUTS = [
             "boneDensity": 97, "boneUnit": "% normy",
             "muscleMass": 98, "muscleUnit": "% normy",
             "hydration": 95, "hydrationUnit": "%",
-            "sleepHours": 7.9, "sleepUnit": "godz."
+            "sleepHours": 7.9, "sleepUnit": "godz.",
+            "sleepScore": 89, "sleepScoreUnit": "pkt",
+            "cortisol": 4.0, "cortisolUnit": "ng/ml",
+            "lactate": 1.6, "lactateUnit": "mmol/l",
+            "cognitiveReadiness": 94, "cognitiveUnit": "%"
         },
         "periodicTests": [
             {
@@ -734,20 +796,14 @@ DEMO_ASTRONAUTS = [
 app_state = {
     "mode": "demo",
     "currentUser": None,
-    "users": list(DEMO_USERS),
-    "astronauts": list(DEMO_ASTRONAUTS),
-    "realUsers": [DEMO_USERS[0]],
+    "users": copy.deepcopy(DEMO_USERS),
+    "astronauts": copy.deepcopy(DEMO_ASTRONAUTS),
+    "realUsers": [copy.deepcopy(DEMO_USERS[0])],
     "realAstronauts": [],
-    "demoUsers": list(DEMO_USERS),
-    "demoAstronauts": list(DEMO_ASTRONAUTS),
-    "eclssCabin": {
-        "temp": 22.4,
-        "pressure": 101.3,
-        "humidity": 44,
-        "o2": 20.9,
-        "co2": 410,
-        "waterTanks": 94
-    },
+    "demoUsers": copy.deepcopy(DEMO_USERS),
+    "demoAstronauts": copy.deepcopy(DEMO_ASTRONAUTS),
+    "eclssCabin": build_initial_eclss(),
+    "crewSummary": {},
   "stepProcedures": [
     {
       "id": 'proc-cisnienie',
@@ -1149,6 +1205,269 @@ SCENARIOS = {
     }
 }
 
+CREW_RESTING_BASELINE = {
+    "tetno": (68.0, 25.0),
+    "hrv_rmssd": (65.0, 64.0),
+    "spo2": (98.8, 0.5),
+    "oddech": (14.0, 2.2),
+    "cisnienie_skurczowe": (120.0, 30.0),
+    "cisnienie_rozkurczowe": (80.0, 20.0),
+    "temperatura_ciala": (36.6, 0.04),
+    "sen_godziny": (7.8, 0.25),
+    "sleep_score": (86.0, 25.0),
+    "stres_opaska": (24.0, 36.0),
+    "body_battery": (84.0, 49.0),
+    "kortyzol_pot": (4.2, 0.6),
+    "mleczany_pot": (1.6, 0.16),
+    "gotowosc_poznawcza": (92.0, 20.0),
+    "cisnienie_kabiny": (101.3, 0.25),
+    "o2_kabiny": (20.9, 0.08),
+}
+
+model_centra: dict[str, Centrum] = {}
+
+
+def _safe_id(astro_id: str) -> str:
+    cleaned = "".join(ch for ch in str(astro_id) if ch.isalnum() or ch in "-_")
+    return cleaned or "default"
+
+
+def get_or_create_centrum(astro_id: str) -> Centrum:
+    key = _safe_id(astro_id)
+    if key not in model_centra:
+        BAZY_OSOBISTE_DIR.mkdir(parents=True, exist_ok=True)
+        c = Centrum(
+            katalog=BAZY_OSOBISTE_DIR / key,
+            plik_sieci=PLIK_SIECI,
+            loguj_csv=False,
+        )
+        for pkey, bdata in STATION_BASELINE.items():
+            if isinstance(bdata, dict) and "sr" in bdata:
+                c.baza.zasiej_jezeli_puste(
+                    pkey,
+                    float(bdata["sr"]),
+                    float(bdata.get("war", 0.0)),
+                    max(int(bdata.get("n", 30)), 30),
+                )
+        for pkey, (sr, war) in CREW_RESTING_BASELINE.items():
+            c.baza.zasiej_jezeli_puste(pkey, sr, war)
+        model_centra[key] = c
+    return model_centra[key]
+
+
+def build_pomiary_for_astronaut(astro: dict, eclss: dict) -> list[dict]:
+    v = astro.get("vitals", {})
+    teraz = time.time()
+    pary = [
+        ("temperatura_kabiny", eclss.get("temp"), "eclss"),
+        ("wilgotnosc_kabiny", eclss.get("humidity"), "eclss"),
+        ("co2_kabiny", eclss.get("co2"), "eclss"),
+        ("cisnienie_kabiny", eclss.get("pressure"), "eclss"),
+        ("o2_kabiny", eclss.get("o2"), "eclss"),
+        ("promieniowanie_dobowe", eclss.get("dailyRadiation", 0.21), "eclss"),
+        ("tetno", v.get("hr"), "biometria"),
+        ("hrv_rmssd", v.get("hrv", 65), "biometria"),
+        ("spo2", v.get("spo2"), "biometria"),
+        ("oddech", v.get("resp", 14), "biometria"),
+        ("cisnienie_skurczowe", v.get("bpSys"), "biometria"),
+        ("cisnienie_rozkurczowe", v.get("bpDia"), "biometria"),
+        ("temperatura_ciala", v.get("temp", 36.6), "biometria"),
+        ("sen_godziny", v.get("sleepHours", 7.8), "sen"),
+        ("sleep_score", v.get("sleepScore", 85), "sen"),
+        ("stres_opaska", v.get("stressLevel", 24), "garmin"),
+        ("body_battery", v.get("bodyBattery", 85), "garmin"),
+        ("kortyzol_pot", v.get("cortisol", 4.2), "biopatch"),
+        ("mleczany_pot", v.get("lactate", 1.6), "biopatch"),
+        ("gotowosc_poznawcza", v.get("cognitiveReadiness", 90), "eeg"),
+    ]
+    out = []
+    for param, val, zrodlo in pary:
+        if val is not None:
+            try:
+                num = float(val)
+                if math.isfinite(num):
+                    out.append({
+                        "parametr": param,
+                        "wartosc": num,
+                        "zrodlo": zrodlo,
+                        "czas_danych": teraz,
+                    })
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
+def feed_astronaut_to_model(astro: dict, eclss: dict, natychmiast: bool = False) -> dict:
+    c = get_or_create_centrum(astro["id"])
+    pomiary = build_pomiary_for_astronaut(astro, eclss)
+    if pomiary:
+        c.dodaj(pomiary)
+    c.krok(natychmiast=natychmiast)
+    snap = c.migawka()
+    astro["modelSummary"] = snap
+
+    ui_status = status_na_ui(snap.get("ogolny", {}).get("status"))
+    astro["overallStatus"] = ui_status
+    if ui_status == "critical":
+        astro["statusLabel"] = "Podwyzszone ryzyko"
+    elif ui_status == "warning":
+        astro["statusLabel"] = "Wymagana obserwacja"
+    else:
+        astro["statusLabel"] = "Stan stabilny"
+
+    indeks = snap.get("ogolny", {}).get("indeks")
+    anom_val = snap.get("anomalia", {}).get("wynik")
+    odchylone = snap.get("raport", {}).get("odchylone", [])
+    idx_txt = f"{indeks:.0f}/100" if indeks is not None else "brak"
+    if odchylone:
+        first_dev = odchylone[0]
+        if first_dev.startswith("1. "):
+            first_dev = first_dev[3:]
+        astro["statusDescription"] = f"Indeks modelu {idx_txt}. {first_dev}"
+    elif anom_val is not None and anom_val >= 75:
+        astro["statusDescription"] = f"Indeks modelu {idx_txt}, siec anomalii {anom_val:.0f}/100. Monitoruj profil sygnalowy."
+    else:
+        astro["statusDescription"] = f"Indeks modelu {idx_txt}. Wszystkie obszary utrzymuja sie w normie referencyjnej i osobistej."
+    return snap
+
+
+def compute_crew_summary(astronauts: list, eclss: dict) -> dict:
+    total = len(astronauts)
+    normal = sum(1 for a in astronauts if a.get("overallStatus") == "normal")
+    warning = sum(1 for a in astronauts if a.get("overallStatus") == "warning")
+    critical = sum(1 for a in astronauts if a.get("overallStatus") == "critical")
+
+    indices = []
+    anomalies = []
+    priority = []
+    area_agg: dict[str, dict] = {}
+    alerts = []
+    recs = []
+    seen_recs = set()
+
+    for a in astronauts:
+        snap = a.get("modelSummary") or {}
+        og = snap.get("ogolny") or {}
+        an = snap.get("anomalia") or {}
+        rap = snap.get("raport") or {}
+
+        idx = og.get("indeks")
+        if idx is not None:
+            indices.append(float(idx))
+        an_w = an.get("wynik")
+        if an_w is not None:
+            anomalies.append(float(an_w))
+
+        dev_areas = [o for o in snap.get("odchylenia", []) if o.get("odchylony")]
+        for o in snap.get("odchylenia", []):
+            ak = o.get("obszar") or o.get("klucz")
+            if not ak:
+                continue
+            cur = area_agg.setdefault(ak, {
+                "obszar": ak,
+                "klucz": ak,
+                "nazwa": o.get("nazwa", ak),
+                "maxWynik": 0.0,
+                "odchyleni": 0,
+            })
+            cur["maxWynik"] = max(cur["maxWynik"], float(o.get("wynik", 0.0)))
+            if o.get("odchylony"):
+                cur["odchyleni"] += 1
+
+        astro_recs = rap.get("zalecenia") or []
+        for r in astro_recs:
+            if r not in seen_recs:
+                seen_recs.add(r)
+                recs.append(r)
+
+        for al in (snap.get("alerty") or [])[:3]:
+            alerts.append({
+                "astroId": a.get("id"),
+                "astroName": a.get("name"),
+                "t": al.get("t", 0.0),
+                "poziom": al.get("poziom", "uwaga"),
+                "tekst": al.get("tekst", ""),
+            })
+
+        priority.append({
+            "id": a.get("id"),
+            "name": a.get("name"),
+            "overallStatus": a.get("overallStatus", "normal"),
+            "statusLabel": a.get("statusLabel", "Stan stabilny"),
+            "index": round(float(idx), 1) if idx is not None else None,
+            "anomaly": round(float(an_w), 1) if an_w is not None else None,
+            "topDeviations": [o.get("nazwa") for o in dev_areas[:3]],
+            "topRecommendation": astro_recs[0] if astro_recs else "Utrzymac biezacy harmonogram i obserwacje.",
+        })
+
+    priority.sort(key=lambda item: (item["index"] if item["index"] is not None else 999.0))
+    alerts.sort(key=lambda item: -float(item.get("t", 0.0)))
+    top_areas = sorted(area_agg.values(), key=lambda x: (-x["odchyleni"], -x["maxWynik"]))
+
+    crew_index = round(sum(indices) / len(indices), 1) if indices else 100.0
+    avg_anom = round(sum(anomalies) / len(anomalies), 1) if anomalies else None
+
+    if critical > 0:
+        overall = "critical"
+        label = "Podwyzszone ryzyko"
+        noun_c = "czlonka" if critical == 1 else "czlonkow"
+        summary_text = (
+            f"Sredni indeks gotowosci zalogi wynosi {crew_index:.1f}/100. "
+            f"Model wskazuje stan krytyczny u {critical} {noun_c} zalogi oraz wymaga pilnej weryfikacji odchylen."
+        )
+    elif warning > 0:
+        overall = "warning"
+        label = "Wymagana obserwacja"
+        noun_w = "czlonka" if warning == 1 else "czlonkow"
+        summary_text = (
+            f"Sredni indeks gotowosci zalogi wynosi {crew_index:.1f}/100. "
+            f"U {warning} {noun_w} zalogi zarejestrowano odchylenia parametrow od norm referencyjnych lub osobistych."
+        )
+    elif total == 0:
+        overall = "normal"
+        label = "Brak zalogi"
+        summary_text = "Brak aktywnych czlonkow zalogi w biezacej misji. Dodaj astronauci w zakladce Ustawienia."
+    else:
+        overall = "normal"
+        label = "Stan stabilny"
+        summary_text = (
+            f"Sredni indeks gotowosci zalogi wynosi {crew_index:.1f}/100. "
+            "Model podsumowujacy potwierdza stabilny profil biometryczny i srodowiskowy calego zespolu."
+        )
+
+    return {
+        "crewIndex": crew_index,
+        "overallStatus": overall,
+        "statusLabel": label,
+        "avgAnomaly": avg_anom,
+        "co2": eclss.get("co2", 2641),
+        "temp": eclss.get("temp", 24.1),
+        "dailyRadiation": eclss.get("dailyRadiation", 0.21),
+        "counts": {
+            "total": total,
+            "normal": normal,
+            "warning": warning,
+            "critical": critical,
+        },
+        "priorityAstronauts": priority,
+        "topDeviatedAreas": top_areas[:5],
+        "alerts": alerts[:8],
+        "recommendations": recs[:6],
+        "summaryText": summary_text,
+        "updatedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+def sync_all_models(natychmiast: bool = False):
+    eclss = app_state.get("eclssCabin") or build_initial_eclss()
+    for a in app_state.get("astronauts", []):
+        feed_astronaut_to_model(a, eclss, natychmiast=natychmiast)
+    app_state["crewSummary"] = compute_crew_summary(app_state.get("astronauts", []), eclss)
+
+
+sync_all_models(natychmiast=True)
+
+
 def telemetry_background_thread():
     while not stop_event.is_set():
         time.sleep(stream_config["interval"])
@@ -1156,15 +1475,33 @@ def telemetry_background_thread():
             continue
 
         with state_lock:
-            # Wahania parametrow kabiny stacji ECLSS
             eclss = app_state["eclssCabin"]
-            eclss["temp"] = round(22.2 + (random.random() * 0.4), 1)
+            if OSDR_RECORDS:
+                osdr_cursor["idx"] = (osdr_cursor["idx"] + 1) % len(OSDR_RECORDS)
+                rec = OSDR_RECORDS[osdr_cursor["idx"]]
+                co2_val = float(rec.get("co2_iss", eclss.get("co2", 2641)))
+                if stream_config["scenario"] == "anomaly":
+                    co2_val = min(4800.0, co2_val + 450.0)
+                eclss["temp"] = round(float(rec.get("temperature_iss", eclss.get("temp", 24.1))), 1)
+                eclss["humidity"] = int(round(float(rec.get("humidity_iss", eclss.get("humidity", 39)))))
+                eclss["co2"] = int(round(co2_val))
+                eclss["sourceTime"] = rec.get("time", "OSDR RR-1")
+            else:
+                eclss["temp"] = round(22.4 + (random.random() * 0.4), 1)
+                eclss["humidity"] = round(40 + (random.random() * 3), 0)
+                eclss["co2"] = int(2500 + (random.random() * 200))
+
             eclss["pressure"] = round(101.2 + (random.random() * 0.2), 1)
-            eclss["humidity"] = round(43 + (random.random() * 2), 0)
             eclss["o2"] = round(20.8 + (random.random() * 0.2), 1)
-            eclss["co2"] = int(405 + (random.random() * 12))
+            rad_base = float(STATION_BASELINE.get("promieniowanie_dobowe", {}).get("sr", 0.21))
+            if stream_config["scenario"] == "eva":
+                rad_base = 0.65
+            elif stream_config["scenario"] == "anomaly":
+                rad_base = 0.92
+            eclss["dailyRadiation"] = round(max(0.12, rad_base + (random.random() * 0.04 - 0.02)), 2)
 
             if not app_state["astronauts"]:
+                app_state["crewSummary"] = compute_crew_summary([], eclss)
                 continue
 
             stream_config["packet_counter"] += 1
@@ -1172,20 +1509,39 @@ def telemetry_background_thread():
             stream_config["last_packet_time"] = now_utc
             sc = SCENARIOS.get(stream_config["scenario"], SCENARIOS["resting"])
 
-            for idx, a in enumerate(app_state["astronauts"]):
+            for a in app_state["astronauts"]:
                 v = a["vitals"]
                 astro_sc = sc
+                cortisol_target = 4.2
+                lactate_target = 1.6
+                cog_target = 92
 
-                # Jesli anomalia, w szczegolnosci dotyczy astronauty z id astro-4 lub astro-3
-                if stream_config["scenario"] == "anomaly" and a["id"] == "astro-4":
+                if stream_config["scenario"] == "training":
+                    cortisol_target = 7.2
+                    lactate_target = 3.2
+                    cog_target = 86
+                elif stream_config["scenario"] == "eva":
+                    cortisol_target = 6.2
+                    lactate_target = 2.4
+                    cog_target = 84
+
+                keep_clinical_demo = (
+                    app_state.get("mode") == "demo"
+                    and stream_config["scenario"] in ("resting", "anomaly")
+                )
+                if keep_clinical_demo and a["id"] == "astro-4":
+                    is_anom = stream_config["scenario"] == "anomaly"
                     astro_sc = {
-                        "hr_target": 106, "hr_range": 8,
+                        "hr_target": 106 if is_anom else 104, "hr_range": 6,
                         "spo2_target": 94,
-                        "bp_sys_target": 148, "bp_dia_target": 96,
-                        "resp_target": 21, "stress_target": 82,
-                        "rad_rate": 0.002, "temp_target": 37.5
+                        "bp_sys_target": 148 if is_anom else 146, "bp_dia_target": 96 if is_anom else 94,
+                        "resp_target": 21 if is_anom else 20, "stress_target": 82,
+                        "rad_rate": 0.002, "temp_target": 37.5 if is_anom else 37.4
                     }
-                elif stream_config["scenario"] == "anomaly" and a["id"] == "astro-3":
+                    cortisol_target = 15.2
+                    lactate_target = 4.1
+                    cog_target = 58
+                elif keep_clinical_demo and a["id"] == "astro-3":
                     astro_sc = {
                         "hr_target": 86, "hr_range": 4,
                         "spo2_target": 97,
@@ -1193,19 +1549,20 @@ def telemetry_background_thread():
                         "resp_target": 17, "stress_target": 56,
                         "rad_rate": 0.001, "temp_target": 37.1
                     }
+                    cortisol_target = 8.8
+                    lactate_target = 2.9
+                    cog_target = 74
 
-                # Obliczenie dryfu fizjologicznego
                 hr_drift = (random.random() * 2 - 1) * astro_sc.get("hr_range", 4) * 0.4
                 hr_step = round((astro_sc["hr_target"] - v["hr"]) * 0.22 + hr_drift)
                 v["hr"] = max(45, min(200, v["hr"] + hr_step))
 
-                # Obliczenie interwalu RR oraz HRV RMSSD
                 v["rr"] = round(60000 / v["hr"])
-                hrv_target = max(20, min(95, round(100 - (v["stressLevel"] * 0.8))))
-                v["hrv"] = max(15, min(120, round(v.get("hrv", 60) + (hrv_target - v.get("hrv", 60)) * 0.2 + (random.random() * 2 - 1))))
+                hrv_target = max(20, min(95, round(86 - (v["stressLevel"] * 0.8))))
+                v["hrv"] = max(15, min(120, round(v.get("hrv", 65) + (hrv_target - v.get("hrv", 65)) * 0.22 + (random.random() * 1.4 - 0.7))))
 
-                spo2_step = round((astro_sc["spo2_target"] - v["spo2"]) * 0.25)
-                spo2_rand = 1 if random.random() > 0.85 else (-1 if random.random() < 0.15 else 0)
+                spo2_step = round((astro_sc["spo2_target"] - v["spo2"]) * 0.35)
+                spo2_rand = -1 if (random.random() < 0.08 and v["spo2"] >= astro_sc["spo2_target"]) else 0
                 v["spo2"] = max(85, min(100, v["spo2"] + spo2_step + spo2_rand))
 
                 bp_sys_step = round((astro_sc["bp_sys_target"] - v["bpSys"]) * 0.18 + (random.random() * 2 - 1))
@@ -1220,7 +1577,6 @@ def telemetry_background_thread():
                 stress_step = round((astro_sc["stress_target"] - v["stressLevel"]) * 0.18 + (random.random() * 2 - 1))
                 v["stressLevel"] = max(5, min(99, v["stressLevel"] + stress_step))
 
-                # Body Battery
                 if "bodyBattery" in v:
                     bb_delta = -0.1 if v["stressLevel"] > 50 else 0.05
                     v["bodyBattery"] = max(5, min(100, round(v["bodyBattery"] + bb_delta + (random.random() * 0.2 - 0.1), 1)))
@@ -1230,21 +1586,15 @@ def telemetry_background_thread():
                 temp_delta = round((astro_sc["temp_target"] - v["temp"]) * 0.15, 1)
                 v["temp"] = max(35.5, min(39.5, round(v["temp"] + temp_delta + (random.random() * 0.06 - 0.03), 1)))
 
-                # Status medyczny
-                if v["hr"] > 125 or v["spo2"] < 95 or v["stressLevel"] > 74 or v["bpSys"] > 158:
-                    a["overallStatus"] = "critical"
-                    a["statusLabel"] = "Podwyzszone ryzyko"
-                    a["statusDescription"] = "Wykryto przekroczenie korytarza normy biometrycznej. Wymagana weryfikacja medyczna."
-                elif v["hr"] > 95 or v["spo2"] < 97 or v["stressLevel"] > 48 or v["bpSys"] > 138:
-                    a["overallStatus"] = "warning"
-                    a["statusLabel"] = "Wymagana obserwacja"
-                    a["statusDescription"] = "Parametry fizjologiczne wskazuja na wzmozone obciazenie organizmu."
-                else:
-                    a["overallStatus"] = "normal"
-                    a["statusLabel"] = "Stan stabilny"
-                    a["statusDescription"] = "Wszystkie biometryczne wskazniki pozostaja w zdefiniowanym korytarzu bezpieczenstwa."
+                cur_cort = float(v.get("cortisol", 4.2))
+                v["cortisol"] = round(max(1.5, min(25.0, cur_cort + (cortisol_target - cur_cort) * 0.18 + (random.random() * 0.2 - 0.1))), 1)
+                cur_lact = float(v.get("lactate", 1.6))
+                v["lactate"] = round(max(0.8, min(8.0, cur_lact + (lactate_target - cur_lact) * 0.18 + (random.random() * 0.12 - 0.06))), 1)
+                cur_cog = float(v.get("cognitiveReadiness", 92))
+                v["cognitiveReadiness"] = max(35, min(100, round(cur_cog + (cog_target - cur_cog) * 0.18 + (random.random() * 2 - 1))))
 
-                # Rejestracja punktu bufora
+                feed_astronaut_to_model(a, eclss, natychmiast=False)
+
                 if "liveTelemetry" not in a:
                     a["liveTelemetry"] = []
                 a["liveTelemetry"].append({
@@ -1259,13 +1609,18 @@ def telemetry_background_thread():
                 if len(a["liveTelemetry"]) > 20:
                     a["liveTelemetry"].pop(0)
 
+            app_state["crewSummary"] = compute_crew_summary(app_state["astronauts"], eclss)
+
+
 @app.route("/")
 def index():
     return send_from_directory(".", "index.html")
 
+
 @app.route("/<path:filename>")
 def static_files(filename):
     return send_from_directory(".", filename)
+
 
 @app.route("/api/state", methods=["GET"])
 def get_state():
@@ -1276,6 +1631,7 @@ def get_state():
             "users": app_state["users"],
             "astronauts": app_state["astronauts"],
             "eclssCabin": app_state.get("eclssCabin", {}),
+            "crewSummary": app_state.get("crewSummary", {}),
             "stepProcedures": app_state.get("stepProcedures", []),
             "scheduleData": app_state.get("scheduleData", {}),
             "prophylaxisGuidelines": app_state.get("prophylaxisGuidelines", []),
@@ -1288,6 +1644,7 @@ def get_state():
                 "time": stream_config["last_packet_time"]
             }
         })
+
 
 @app.route("/api/telemetry/live", methods=["GET"])
 def get_telemetry_live():
@@ -1313,6 +1670,7 @@ def get_telemetry_live():
             "scenario": stream_config["scenario"],
             "astronauts": astros,
             "eclssCabin": app_state.get("eclssCabin", {}),
+            "crewSummary": app_state.get("crewSummary", {}),
             "stats": {
                 "total": total,
                 "normal": normal,
@@ -1323,6 +1681,7 @@ def get_telemetry_live():
                 "avgRad": avg_rad
             }
         })
+
 
 @app.route("/api/telemetry/control", methods=["POST"])
 def control_telemetry():
@@ -1353,6 +1712,248 @@ def control_telemetry():
             "packet": stream_config["packet_counter"]
         })
 
+
+@app.route("/api/telemetry/entry", methods=["POST"])
+@app.route("/api/pomiary", methods=["POST"])
+def post_telemetry_entry():
+    data = request.get_json() or {}
+    with state_lock:
+        eclss = app_state["eclssCabin"]
+        if isinstance(data.get("eclss"), dict):
+            for ek, val in data["eclss"].items():
+                if ek in eclss:
+                    eclss[ek] = val
+
+        astro_id = data.get("astroId") or data.get("astronautId") or (app_state["astronauts"][0]["id"] if app_state["astronauts"] else None)
+        target = next((a for a in app_state["astronauts"] if a["id"] == astro_id), None)
+
+        if target is not None:
+            v = target["vitals"]
+            payload_v = data.get("vitals") if isinstance(data.get("vitals"), dict) else data
+            num_fields = {
+                "hr": int,
+                "bpSys": int,
+                "bpDia": int,
+                "spo2": int,
+                "temp": float,
+                "resp": int,
+                "radDose": float,
+                "stressLevel": int,
+                "boneDensity": int,
+                "muscleMass": int,
+                "hydration": int,
+                "bodyBattery": float,
+                "hrv": int,
+                "sleepHours": float,
+                "sleepScore": int,
+                "cortisol": float,
+                "lactate": float,
+                "cognitiveReadiness": int,
+            }
+            for fk, caster in num_fields.items():
+                if fk in payload_v and payload_v[fk] is not None:
+                    try:
+                        v[fk] = caster(payload_v[fk])
+                    except (TypeError, ValueError):
+                        pass
+            if v.get("hr"):
+                v["rr"] = round(60000 / max(int(v["hr"]), 30))
+
+            if isinstance(data.get("pomiary"), list):
+                c = get_or_create_centrum(target["id"])
+                c.dodaj(data["pomiary"])
+
+            history = target.setdefault("telemetryHistory", [])
+            history.append({
+                "day": f"Dzien {184 + len(history)}",
+                "hr": v["hr"],
+                "bpSys": v["bpSys"],
+                "spo2": v["spo2"],
+                "stress": v["stressLevel"],
+                "rad": v["radDose"],
+            })
+            feed_astronaut_to_model(target, eclss, natychmiast=True)
+
+            forced_status = data.get("overallStatus") or data.get("status")
+            if forced_status in ("normal", "warning", "critical"):
+                target["overallStatus"] = forced_status
+                if forced_status == "normal":
+                    target["statusLabel"] = "Stan stabilny"
+                elif forced_status == "warning":
+                    target["statusLabel"] = "Wymagana obserwacja"
+                else:
+                    target["statusLabel"] = "Podwyzszone ryzyko"
+        elif isinstance(data.get("pomiary"), list):
+            for a in app_state["astronauts"]:
+                c = get_or_create_centrum(a["id"])
+                c.dodaj(data["pomiary"])
+                feed_astronaut_to_model(a, eclss, natychmiast=True)
+
+        app_state["crewSummary"] = compute_crew_summary(app_state["astronauts"], eclss)
+        return jsonify({
+            "success": True,
+            "astronaut": target,
+            "eclssCabin": eclss,
+            "crewSummary": app_state["crewSummary"],
+        })
+
+
+@app.route("/api/model/summary", methods=["GET"])
+def get_model_summary():
+    astro_id = request.args.get("astro_id")
+    with state_lock:
+        if astro_id:
+            target = next((a for a in app_state["astronauts"] if a["id"] == astro_id), None)
+            if not target:
+                return jsonify({"error": "Nie znaleziono astronauty"}), 404
+            return jsonify({
+                "astroId": target["id"],
+                "name": target["name"],
+                "overallStatus": target.get("overallStatus"),
+                "statusLabel": target.get("statusLabel"),
+                "modelSummary": target.get("modelSummary", {}),
+                "crewSummary": app_state.get("crewSummary", {}),
+            })
+        return jsonify({
+            "crewSummary": app_state.get("crewSummary", {}),
+            "eclssCabin": app_state.get("eclssCabin", {}),
+            "astronauts": [
+                {
+                    "id": a["id"],
+                    "name": a["name"],
+                    "overallStatus": a.get("overallStatus"),
+                    "statusLabel": a.get("statusLabel"),
+                    "modelSummary": a.get("modelSummary", {}),
+                }
+                for a in app_state["astronauts"]
+            ],
+        })
+
+
+@app.route("/api/raport.txt", methods=["GET"])
+def get_raport_txt():
+    astro_id = request.args.get("astro_id")
+    with state_lock:
+        astros = app_state.get("astronauts", [])
+        if astro_id:
+            target = next((a for a in astros if a["id"] == astro_id), None)
+            if target and target.get("modelSummary", {}).get("raport"):
+                txt = f"Astronauta: {target['name']}\n\n" + raport_jako_tekst(target["modelSummary"]["raport"])
+            else:
+                txt = "Brak danych modelu dla wskazanego astronauty."
+        else:
+            cs = app_state.get("crewSummary", {})
+            lines = [
+                f"Raport zbiorczy modelu HMS-of-A : {cs.get('updatedAt', '')}",
+                cs.get("summaryText", ""),
+                "",
+            ]
+            for a in astros:
+                lines.append(f"=== {a['name']} ===")
+                rap = (a.get("modelSummary") or {}).get("raport")
+                if rap:
+                    lines.append(raport_jako_tekst(rap))
+                lines.append("")
+            txt = "\n".join(lines)
+        return Response(
+            txt,
+            mimetype="text/plain; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=raport_hms.txt"},
+        )
+
+
+@app.route("/api/garmin/import", methods=["POST"])
+def import_garmin():
+    data = request.get_json(silent=True) or {}
+    with state_lock:
+        existing = next((a for a in app_state["astronauts"] if a.get("source") == "Garmin Health Telemetry Link"), None)
+        if existing:
+            return jsonify({"success": False, "error": "Profil Garmin zostal juz zintegrowany.", "astronaut": existing}), 409
+
+        new_id = f"astro-garmin-{int(time.time() * 1000)}"
+        name = data.get("name", "Marek Kosmonauta")
+        initials = "".join([part[0] for part in name.strip().split()[:2]]).upper() or "MK"
+        new_user = {
+            "id": new_id,
+            "login": f"garmin{int(time.time())}",
+            "password": "kosmos2026",
+            "name": name,
+            "role": "",
+            "title": "",
+            "accessLevel": "Konto osobiste",
+            "avatarCode": initials,
+        }
+        new_astro = {
+            "id": new_id,
+            "name": name,
+            "role": "",
+            "avatarCode": initials,
+            "age": int(data.get("age", 34)),
+            "bloodType": data.get("bloodType", "0 Rh plus"),
+            "missionDay": 184,
+            "evaHours": 8,
+            "overallStatus": "normal",
+            "statusLabel": "Stan stabilny",
+            "statusDescription": "Strumien biometryczny pobierany z sensorow Garmin Elevate.",
+            "source": "Garmin Health Telemetry Link",
+            "vitals": {
+                "hr": 68, "hrUnit": "bpm",
+                "rr": 882, "rrUnit": "ms",
+                "hrv": 66, "hrvUnit": "ms",
+                "bpSys": 118, "bpDia": 76, "bpUnit": "mmHg",
+                "spo2": 99, "spo2Unit": "%",
+                "temp": 36.6, "tempUnit": "st. C",
+                "resp": 14, "respUnit": "oddech/min",
+                "radDose": 3.2, "radUnit": "mSv",
+                "boneDensity": 99, "boneUnit": "% normy",
+                "muscleMass": 100, "muscleUnit": "% normy",
+                "hydration": 96, "hydrationUnit": "%",
+                "sleepHours": 7.9, "sleepUnit": "godz.",
+                "sleepScore": 88, "sleepScoreUnit": "pkt",
+                "stressLevel": 21, "stressUnit": "pkt",
+                "bodyBattery": 88, "bodyBatteryUnit": "pkt",
+                "cortisol": 4.1, "cortisolUnit": "ng/ml",
+                "lactate": 1.5, "lactateUnit": "mmol/l",
+                "cognitiveReadiness": 93, "cognitiveUnit": "%",
+            },
+            "periodicTests": [],
+            "telemetryHistory": [
+                {"day": "Dzien 179", "hr": 67, "bpSys": 117, "spo2": 99, "stress": 22, "rad": 2.8},
+                {"day": "Dzien 180", "hr": 69, "bpSys": 118, "spo2": 98, "stress": 24, "rad": 2.9},
+                {"day": "Dzien 181", "hr": 66, "bpSys": 116, "spo2": 99, "stress": 20, "rad": 3.0},
+                {"day": "Dzien 182", "hr": 70, "bpSys": 119, "spo2": 99, "stress": 23, "rad": 3.1},
+                {"day": "Dzien 183", "hr": 68, "bpSys": 118, "spo2": 99, "stress": 21, "rad": 3.1},
+                {"day": "Dzien 184", "hr": 68, "bpSys": 118, "spo2": 99, "stress": 21, "rad": 3.2},
+            ],
+            "orders": [
+                {
+                    "id": "ord-g1",
+                    "date": "2026-11-14",
+                    "author": "Marek Marczak",
+                    "text": "Pomiary z czujnika Garmin zintegrowane prawidlowo z glowna szyna telemetrii HMS-of-A.",
+                    "priority": "standard",
+                }
+            ],
+            "dailyChecks": [],
+        }
+        app_state["users"].append(new_user)
+        app_state["astronauts"].insert(0, new_astro)
+        feed_astronaut_to_model(new_astro, app_state["eclssCabin"], natychmiast=True)
+        app_state["crewSummary"] = compute_crew_summary(app_state["astronauts"], app_state["eclssCabin"])
+        if app_state["mode"] == "real":
+            app_state["realUsers"] = list(app_state["users"])
+            app_state["realAstronauts"] = list(app_state["astronauts"])
+        else:
+            app_state["demoUsers"] = list(app_state["users"])
+            app_state["demoAstronauts"] = list(app_state["astronauts"])
+        return jsonify({
+            "success": True,
+            "astronaut": new_astro,
+            "user": new_user,
+            "crewSummary": app_state["crewSummary"],
+        })
+
+
 @app.route("/api/mode", methods=["POST"])
 def set_mode():
     data = request.get_json() or {}
@@ -1373,24 +1974,66 @@ def set_mode():
             if not any(u["id"] == app_state["currentUser"] for u in app_state["users"]):
                 app_state["currentUser"] = None
 
+        sync_all_models(natychmiast=True)
         return jsonify({
             "success": True,
             "mode": app_state["mode"],
-            "crew_count": len(app_state["astronauts"])
+            "crew_count": len(app_state["astronauts"]),
+            "astronauts": app_state["astronauts"],
+            "users": app_state["users"],
+            "crewSummary": app_state["crewSummary"],
         })
+
+
+@app.route("/api/mission/reset", methods=["POST"])
+def reset_mission():
+    data = request.get_json(silent=True) or {}
+    target = data.get("target", "demo")
+    with state_lock:
+        model_centra.clear()
+        app_state["eclssCabin"] = build_initial_eclss()
+        osdr_cursor["idx"] = 0
+        if target == "clear":
+            kierownik = copy.deepcopy(DEMO_USERS[0])
+            app_state["mode"] = "real"
+            app_state["users"] = [kierownik]
+            app_state["astronauts"] = []
+            app_state["realUsers"] = [kierownik]
+            app_state["realAstronauts"] = []
+            app_state["currentUser"] = None
+        else:
+            app_state["mode"] = "demo"
+            app_state["demoUsers"] = copy.deepcopy(DEMO_USERS)
+            app_state["demoAstronauts"] = copy.deepcopy(DEMO_ASTRONAUTS)
+            app_state["users"] = copy.deepcopy(DEMO_USERS)
+            app_state["astronauts"] = copy.deepcopy(DEMO_ASTRONAUTS)
+            app_state["currentUser"] = None
+        sync_all_models(natychmiast=True)
+        return jsonify({
+            "success": True,
+            "mode": app_state["mode"],
+            "users": app_state["users"],
+            "astronauts": app_state["astronauts"],
+            "eclssCabin": app_state["eclssCabin"],
+            "crewSummary": app_state["crewSummary"],
+        })
+
 
 @app.route("/api/astronauts", methods=["POST"])
 def add_astronaut():
     data = request.get_json() or {}
     with state_lock:
         name = data.get("name", "Nowy Astronauta")
-        role = data.get("role", "Członek zalogi")
-        title = data.get("title", "Specjalista pokladowy")
+        role = data.get("role", "")
+        title = data.get("title", "")
         login = data.get("login", f"astro{int(time.time())}")
         password = data.get("password", "kosmos2026")
         type_role = data.get("type", "astro")
 
-        new_id = f"astro-{int(time.time() * 1000)}"
+        if type_role == "kierownik" and not role:
+            role = "Kierownik"
+
+        new_id = f"{'kierownik' if type_role == 'kierownik' else 'astro'}-{int(time.time() * 1000)}"
         initials = "".join([part[0] for part in name.strip().split()[:2]]).upper() or "AS"
 
         new_user = {
@@ -1405,6 +2048,7 @@ def add_astronaut():
         }
         app_state["users"].append(new_user)
 
+        new_astro = None
         if type_role == "astro":
             hr = int(data.get("hr", 72))
             bp_sys = int(data.get("bpSys", 120))
@@ -1416,7 +2060,7 @@ def add_astronaut():
             new_astro = {
                 "id": new_id,
                 "name": name,
-                "role": role,
+                "role": "",
                 "avatarCode": initials,
                 "age": int(data.get("age", 35)),
                 "bloodType": data.get("bloodType", "0 Rh plus"),
@@ -1427,7 +2071,7 @@ def add_astronaut():
                 "statusDescription": "Nowo przyjety czlonek zalogi. Parametry bazowe wprowadzone do systemu.",
                 "vitals": {
                     "hr": hr, "hrUnit": "bpm",
-                    "rr": round(60000 / hr), "rrUnit": "ms",
+                    "rr": round(60000 / max(hr, 30)), "rrUnit": "ms",
                     "hrv": 65, "hrvUnit": "ms",
                     "bpSys": bp_sys, "bpDia": bp_dia, "bpUnit": "mmHg",
                     "spo2": spo2, "spo2Unit": "%",
@@ -1439,7 +2083,11 @@ def add_astronaut():
                     "boneDensity": 100, "boneUnit": "% normy",
                     "muscleMass": 100, "muscleUnit": "% normy",
                     "hydration": 98, "hydrationUnit": "%",
-                    "sleepHours": 8.0, "sleepUnit": "godz."
+                    "sleepHours": 8.0, "sleepUnit": "godz.",
+                    "sleepScore": 88, "sleepScoreUnit": "pkt",
+                    "cortisol": 4.0, "cortisolUnit": "ng/ml",
+                    "lactate": 1.5, "lactateUnit": "mmol/l",
+                    "cognitiveReadiness": 92, "cognitiveUnit": "%",
                 },
                 "periodicTests": [],
                 "telemetryHistory": [
@@ -1449,29 +2097,46 @@ def add_astronaut():
                 "dailyChecks": []
             }
             app_state["astronauts"].append(new_astro)
+            feed_astronaut_to_model(new_astro, app_state["eclssCabin"], natychmiast=True)
 
+        app_state["crewSummary"] = compute_crew_summary(app_state["astronauts"], app_state["eclssCabin"])
         if app_state["mode"] == "real":
             app_state["realUsers"] = list(app_state["users"])
             app_state["realAstronauts"] = list(app_state["astronauts"])
+        else:
+            app_state["demoUsers"] = list(app_state["users"])
+            app_state["demoAstronauts"] = list(app_state["astronauts"])
 
-        return jsonify({"success": True, "id": new_id})
+        return jsonify({
+            "success": True,
+            "id": new_id,
+            "user": new_user,
+            "astronaut": new_astro,
+            "crewSummary": app_state["crewSummary"],
+        })
+
 
 @app.route("/api/astronauts/<astro_id>", methods=["DELETE"])
 def delete_astronaut(astro_id):
     with state_lock:
         app_state["users"] = [u for u in app_state["users"] if u["id"] != astro_id]
         app_state["astronauts"] = [a for a in app_state["astronauts"] if a["id"] != astro_id]
+        model_centra.pop(_safe_id(astro_id), None)
+        app_state["crewSummary"] = compute_crew_summary(app_state["astronauts"], app_state["eclssCabin"])
         if app_state["mode"] == "real":
             app_state["realUsers"] = list(app_state["users"])
             app_state["realAstronauts"] = list(app_state["astronauts"])
-        return jsonify({"success": True})
+        else:
+            app_state["demoUsers"] = list(app_state["users"])
+            app_state["demoAstronauts"] = list(app_state["astronauts"])
+        return jsonify({"success": True, "crewSummary": app_state["crewSummary"]})
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"Start serwera HMS-of-A na porcie {port}...")
     print(f"Adres URL: http://localhost:{port}/")
 
-    # Start watku telemetrii
     thread = threading.Thread(target=telemetry_background_thread, daemon=True)
     thread.start()
 

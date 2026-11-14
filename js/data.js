@@ -107,7 +107,15 @@ const DEMO_ASTRONAUTS = [
       hydration: 95,
       hydrationUnit: '%',
       sleepHours: 7.8,
-      sleepUnit: 'godz.'
+      sleepUnit: 'godz.',
+      sleepScore: 88,
+      sleepScoreUnit: 'pkt',
+      cortisol: 4.2,
+      cortisolUnit: 'ng/ml',
+      lactate: 1.8,
+      lactateUnit: 'mmol/l',
+      cognitiveReadiness: 92,
+      cognitiveUnit: '%'
     },
     periodicTests: [
       {
@@ -269,7 +277,15 @@ const DEMO_ASTRONAUTS = [
       hydration: 96,
       hydrationUnit: '%',
       sleepHours: 8.0,
-      sleepUnit: 'godz.'
+      sleepUnit: 'godz.',
+      sleepScore: 92,
+      sleepScoreUnit: 'pkt',
+      cortisol: 3.8,
+      cortisolUnit: 'ng/ml',
+      lactate: 1.4,
+      lactateUnit: 'mmol/l',
+      cognitiveReadiness: 95,
+      cognitiveUnit: '%'
     },
     periodicTests: [
       {
@@ -424,7 +440,15 @@ const DEMO_ASTRONAUTS = [
       hydration: 89,
       hydrationUnit: '%',
       sleepHours: 5.6,
-      sleepUnit: 'godz.'
+      sleepUnit: 'godz.',
+      sleepScore: 64,
+      sleepScoreUnit: 'pkt',
+      cortisol: 8.6,
+      cortisolUnit: 'ng/ml',
+      lactate: 2.9,
+      lactateUnit: 'mmol/l',
+      cognitiveReadiness: 74,
+      cognitiveUnit: '%'
     },
     periodicTests: [
       {
@@ -586,7 +610,15 @@ const DEMO_ASTRONAUTS = [
       hydration: 85,
       hydrationUnit: '%',
       sleepHours: 4.2,
-      sleepUnit: 'godz.'
+      sleepUnit: 'godz.',
+      sleepScore: 46,
+      sleepScoreUnit: 'pkt',
+      cortisol: 15.2,
+      cortisolUnit: 'ng/ml',
+      lactate: 4.1,
+      lactateUnit: 'mmol/l',
+      cognitiveReadiness: 58,
+      cognitiveUnit: '%'
     },
     periodicTests: [
       {
@@ -748,7 +780,15 @@ const DEMO_ASTRONAUTS = [
       hydration: 95,
       hydrationUnit: '%',
       sleepHours: 7.9,
-      sleepUnit: 'godz.'
+      sleepUnit: 'godz.',
+      sleepScore: 89,
+      sleepScoreUnit: 'pkt',
+      cortisol: 4.0,
+      cortisolUnit: 'ng/ml',
+      lactate: 1.6,
+      lactateUnit: 'mmol/l',
+      cognitiveReadiness: 94,
+      cognitiveUnit: '%'
     },
     periodicTests: [
       {
@@ -885,12 +925,14 @@ const INITIAL_DATA = {
   demoUsers: DEMO_USERS,
   demoAstronauts: DEMO_ASTRONAUTS,
   eclssCabin: {
-    temp: 22.4,
+    temp: 24.1,
     pressure: 101.3,
-    humidity: 44,
+    humidity: 39,
     o2: 20.9,
-    co2: 410,
-    waterTanks: 94
+    co2: 2641,
+    waterTanks: 94,
+    dailyRadiation: 0.21,
+    sourceTime: 'OSDR RR-1'
   },
   stepProcedures: [
     {
