@@ -105,7 +105,8 @@ The background stream supports four scenarios selectable in the live control bar
 ## Project Structure
 
 - `README.md` - Project documentation at repository root
-- `local_camera_models/` - Dedicated directory reserved for local camera vision models
+- `.gitattributes` - Git LFS tracking rules for `.onnx` and `.task` model weight binaries
+- `local_camera_models/` - Offline CPU local AI models from `origin/gotowe-modele`: vision models in `vision/`, voice models in `voice/`, `example.py`, `requirements.txt`, and `README.md`
 - `app/app.py` - Flask web server, background telemetry worker, model integration, and REST API
 - `app/index.html` - Single-page web application shell
 - `app/css/style.css` - Mission-control stylesheet with night and day themes

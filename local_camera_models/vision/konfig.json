@@ -1,0 +1,25 @@
+{
+  "MAR_YAWN": 0.43244656920433044,
+  "FEATURE_NAMES": [
+    "face_ratio",
+    "perclos",
+    "closed_mean",
+    "blinks_per_min",
+    "blink_dur_mean",
+    "long_closures_per_min",
+    "ear_mean",
+    "ear_std",
+    "mar_mean",
+    "mar_p95",
+    "yawns_per_min",
+    "pitch_mean",
+    "pitch_std",
+    "yaw_std",
+    "roll_std"
+  ],
+  "ZMECZENIE_PLATT": [
+    0.058663632636058075,
+    -0.8956426887673848
+  ],
+  "ZMECZENIE_OPIS": "fatigue = 100 * sigmoid(a * rule_score + b) = estimated P(drowsy) in percent; UTA-RLDD, 60 subjects"
+}

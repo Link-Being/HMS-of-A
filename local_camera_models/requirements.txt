@@ -1,0 +1,7 @@
+numpy
+scipy
+opencv-python
+mediapipe
+onnxruntime
+sounddevice
+praat-parselmouth
