@@ -1,11 +1,10 @@
 """
-Trening sieci anomalii autoenkodera 11-16-4-16-11 na wspolnych danych stacji ECLSS
-oraz normalnych wzorcow telemetrycznych zalogi HMS-of-A.
+Training CLI for the 11-16-4-16-11 denoising autoencoder on shared ECLSS cabin data
+and normal HMS-of-A crew physiological baselines.
 
-Wykorzystuje zebrane dane historyczne dane/historia_pomiarow.csv oraz telemetrie
-NASA OSDR dane/osdr_RR1.json dla warunkow kabiny, uzupelnione o bazowe rozklady
-parametrów fizjologicznych zalogi w stanie spoczynku i normy.
-Zapisuje wytrenowana siec w dane/anomalie.json oraz dane/anomalie.npz jesli dostepny numpy.
+Reads collected history from data/telemetry_history.csv and NASA OSDR telemetry from
+data/osdr_RR1.json, augmented with resting crew physiological patterns.
+Saves trained weights to data/anomalies.json and data/anomalies.npz when NumPy is installed.
 """
 from __future__ import annotations
 
@@ -16,8 +15,8 @@ import math
 import pathlib
 import random
 
-from model import normy as N
-from model.anomalie import SiecAnomalii
+from model import thresholds as N
+from model.anomaly_model import SiecAnomalii
 
 TU = pathlib.Path(__file__).resolve().parent
 ROOT = TU.parent
@@ -82,11 +81,11 @@ def _wektory_osdr(plik: pathlib.Path, limit: int = 400) -> list[dict]:
 
 def buduj_zbior_treningowy(dane_dir: pathlib.Path, ziarno: int = 42) -> list[list[float]]:
     rng = random.Random(ziarno)
-    srodowisko = _wektory_csv(dane_dir / "historia_pomiarow.csv") + _wektory_osdr(dane_dir / "osdr_RR1.json")
+    srodowisko = _wektory_csv(dane_dir / "telemetry_history.csv") + _wektory_osdr(dane_dir / "osdr_RR1.json")
     if not srodowisko:
         srodowisko = [{"temperatura_kabiny": 23.0, "wilgotnosc_kabiny": 42.0, "co2_kabiny": 2500.0}]
 
-    # Wzorce spoczynkowe normalnych parametrow biometrycznych zalogi
+    # Resting baseline biometric profiles for normal crew conditions
     bazy = [
         {"tetno": 68.0, "hrv_rmssd": 64.0, "spo2": 99.0, "oddech": 14.0, "cisnienie_skurczowe": 120.0, "temperatura_ciala": 36.6, "stres_opaska": 24.0, "body_battery": 85.0},
         {"tetno": 65.0, "hrv_rmssd": 72.0, "spo2": 99.0, "oddech": 13.0, "cisnienie_skurczowe": 118.0, "temperatura_ciala": 36.5, "stres_opaska": 20.0, "body_battery": 88.0},
@@ -116,18 +115,18 @@ def buduj_zbior_treningowy(dane_dir: pathlib.Path, ziarno: int = 42) -> list[lis
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Trening sieci anomalii HMS-of-A")
-    ap.add_argument("--dane", default=str(ROOT / "dane"))
-    ap.add_argument("--epoki", type=int, default=180)
+    ap = argparse.ArgumentParser(description="Train HMS-of-A anomaly detection network")
+    ap.add_argument("--data", "--dane", dest="dane", metavar="DIR", default=str(ROOT / "data"))
+    ap.add_argument("--epochs", "--epoki", dest="epoki", metavar="EPOCHS", type=int, default=180)
     args = ap.parse_args()
 
     dane_dir = pathlib.Path(args.dane)
     X = buduj_zbior_treningowy(dane_dir)
-    print(f"Zbudowano {len(X)} wektorow treningowych dla {len(N.CECHY_ANOMALII)} cech.")
+    print(f"Built {len(X)} training vectors for {len(N.CECHY_ANOMALII)} features.")
     siec = SiecAnomalii(N.CECHY_ANOMALII).trenuj(X, epoki=args.epoki, lr=4e-3, bs=64, p_ukrycia=0.2)
-    cel = dane_dir / "anomalie.json"
+    cel = dane_dir / "anomalies.json"
     siec.zapisz(cel)
-    print(f"Zapisano model sieci anomalii do {cel}.")
+    print(f"Saved anomaly network weights to {cel}.")
 
 
 if __name__ == "__main__":

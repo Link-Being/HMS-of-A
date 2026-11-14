@@ -1,7 +1,7 @@
 """
-Centrum modelu podsumowujacego: przyjmuje pomiary z sensorow i ECLSS,
-ocenia je normami referencyjnymi oraz osobistymi, liczy indeksy obszarow,
-uruchamia autoenkoder anomalii, pilnuje alertow bez migania oraz generuje raport.
+Model evaluation hub: ingests sensor and ECLSS measurements, evaluates them
+against reference thresholds and personal baselines, computes domain indices,
+runs the anomaly autoencoder, debounces alerts, and builds reports.
 """
 from __future__ import annotations
 
@@ -12,11 +12,11 @@ import pathlib
 import threading
 import time
 
-from . import anomalie as A
-from . import normy as N
-from . import odchylenia as O
-from . import raport as R
-from .baza_osobista import BazaOsobista
+from . import anomaly_model as A
+from . import deviations as O
+from . import report as R
+from . import thresholds as N
+from .personal_baseline import BazaOsobista
 
 SWIEZOSC_S = 180
 PROG_ANOMALII = 90.0
@@ -94,12 +94,12 @@ class Centrum:
         self.status_gl: str | None = None
         self._t_gl: float | None = None
         self.ogolny_hist: collections.deque = collections.deque(maxlen=3600)
-        self.baza = BazaOsobista(self.katalog / "baza_osobista.json")
+        self.baza = BazaOsobista(self.katalog / "personal_baseline.json")
         self._loguj_csv = bool(loguj_csv)
         self._flog = None
         self._log = None
         if self._loguj_csv:
-            log_path = pathlib.Path(sciezka_logu) if sciezka_logu else (self.katalog / "historia_pomiarow.csv")
+            log_path = pathlib.Path(sciezka_logu) if sciezka_logu else (self.katalog / "telemetry_history.csv")
             log_path.parent.mkdir(parents=True, exist_ok=True)
             nowy = not log_path.exists()
             self._flog = open(log_path, "a", newline="", encoding="utf-8")
@@ -139,11 +139,11 @@ class Centrum:
         if potw is None:
             self._ostatni_status[k] = st
             if st in ("uwaga", "alarm"):
-                norma_txt = par.opis_norm or "brak"
+                norma_txt = par.opis_norm or "none"
                 self.alerty.appendleft({
                     "t": t,
                     "poziom": st,
-                    "tekst": f"{par.nazwa}: {par.fmt(v)} {par.jednostka}, norma: {norma_txt}",
+                    "tekst": f"{par.nazwa}: {par.fmt(v)} {par.jednostka}, threshold: {norma_txt}",
                 })
             return
         kand, od = self._kandydat.get(k, (None, t))
@@ -159,17 +159,17 @@ class Centrum:
         self._ostatni_status[k] = st
         self._kandydat.pop(k, None)
         if st in ("uwaga", "alarm"):
-            norma_txt = par.opis_norm or "brak"
+            norma_txt = par.opis_norm or "none"
             self.alerty.appendleft({
                 "t": t,
                 "poziom": st,
-                "tekst": f"{par.nazwa}: {par.fmt(v)} {par.jednostka}, norma: {norma_txt}",
+                "tekst": f"{par.nazwa}: {par.fmt(v)} {par.jednostka}, threshold: {norma_txt}",
             })
         elif potw in ("uwaga", "alarm") and st == "norma":
             self.alerty.appendleft({
                 "t": t,
                 "poziom": "info",
-                "tekst": f"{par.nazwa} powrot do normy",
+                "tekst": f"{par.nazwa} returned to normal",
             })
 
     def wartosci(self, teraz: float | None = None) -> dict[str, float]:
@@ -322,7 +322,7 @@ class Centrum:
                         "t": teraz,
                         "poziom": "uwaga",
                         "anomalia": True,
-                        "tekst": f"Nietypowy stan : anomalia {w:.0f}/100 : {nazwy}",
+                        "tekst": f"Atypical state : anomaly {w:.0f}/100 : {nazwy}",
                     })
 
     def migawka(self) -> dict:

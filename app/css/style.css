@@ -1,6 +1,6 @@
-/* Glowny arkusz stylow dla HMS-of-A */
+/* Main stylesheet for HMS-of-A */
 /* Health Monitoring System of Astronauts */
-/* Zero emotek, zero nawiasow w tekstach, zero dlugich myslnikow */
+/* No emojis, no parentheses in UI text, no long dashes */
 
 :root {
   --bg-deep: #060b13;
@@ -51,7 +51,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* NAGLOWEK */
+/* HEADER */
 .app-header {
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-color);
@@ -162,7 +162,7 @@ body {
   color: #34d399;
 }
 
-/* NAWIGACJA ZAKLADEK */
+/* TAB NAVIGATION */
 .main-nav {
   max-width: 1440px;
   margin: 0 auto;
@@ -198,7 +198,7 @@ body {
   background: rgba(0, 212, 255, 0.04);
 }
 
-/* OBSZAR GLOWNY */
+/* MAIN CONTENT AREA */
 .app-main {
   max-width: 1440px;
   margin: 0 auto;
@@ -207,7 +207,7 @@ body {
   flex: 1;
 }
 
-/* NAGLOWEK WIDOKU */
+/* VIEW HEADER */
 .view-header {
   display: flex;
   align-items: flex-start;
@@ -249,7 +249,7 @@ body {
   font-weight: 500;
 }
 
-/* BANERY INFORMACYJNE I ALARMY */
+/* INFO BANNERS AND ALERTS */
 .alert-banner-box {
   display: flex;
   align-items: center;
@@ -288,7 +288,7 @@ body {
   color: #ffffff;
 }
 
-/* STATYSTYKI ZESPOLOWE - KAFLOWE */
+/* CREW SUMMARY KPI TILES */
 .stats-overview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -330,7 +330,7 @@ body {
 .color-warning { color: var(--warning-amber); }
 .color-critical { color: var(--danger-red); }
 
-/* UKLAD PODZIALU DASHBOARD */
+/* DASHBOARD SPLIT LAYOUT */
 .dashboard-split-layout {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -369,7 +369,7 @@ body {
   color: #ffffff;
 }
 
-/* KARTY ASTRONAUTOW - WIDOK KIEROWNIKA */
+/* ASTRONAUT CARDS - COMMANDER VIEW */
 .astronauts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -512,7 +512,7 @@ body {
   border: 1px solid rgba(239, 68, 68, 0.4);
 }
 
-/* PRZYCISKI */
+/* BUTTONS */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -572,7 +572,7 @@ body {
 .mt-2 { margin-top: 8px; }
 .mb-4 { margin-bottom: 24px; }
 
-/* PANELE BOCZNE */
+/* SIDE PANELS */
 .side-panel-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -646,7 +646,7 @@ body {
   height: 140px;
 }
 
-/* WIDOK POJEDYNCZEGO ASTRONAUTY */
+/* SINGLE ASTRONAUT VIEW */
 .personal-summary-banner {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -719,7 +719,7 @@ body {
   line-height: 1.4;
 }
 
-/* GLOWNY STATUS ZDROWIA ASTRONAUTY - CZY DANE SA W NORMIE */
+/* PRIMARY ASTRONAUT HEALTH STATUS - OVERALL NORMALCY CHECK */
 .astro-overall-status-banner {
   border-radius: var(--radius-md);
   padding: 24px;
@@ -877,7 +877,7 @@ body {
   box-shadow: 0 0 6px #ef4444;
 }
 
-/* DOKLADNE ODCZYTY Z CZUJNIKOW MNIEJSZYMI LITERAMI */
+/* DETAILED SENSOR READINGS IN COMPACT TYPOGRAPHY */
 .sensor-readings-section {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -979,7 +979,7 @@ body {
 
 .sensor-exact-value {
   font-family: var(--font-mono);
-  font-size: 15px; /* MNIEJSZE LITERY / LICZBY Z CZUJNIKOW */
+  font-size: 15px; /* COMPACT SENSOR FONT SIZE */
   font-weight: 700;
   color: #f8fafc;
   letter-spacing: 0.3px;
@@ -997,7 +997,7 @@ body {
   line-height: 1.3;
 }
 
-/* SIATKA KART PARAMETROW ZDROWOTNYCH */
+/* HEALTH METRIC CARDS GRID */
 .vitals-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
@@ -1027,14 +1027,6 @@ body {
   font-weight: 500;
 }
 
-.vital-tag {
-  font-size: 10px;
-  padding: 2px 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 3px;
-  color: var(--text-muted);
-}
-
 .vital-value-row {
   display: flex;
   align-items: baseline;
@@ -1061,7 +1053,7 @@ body {
   margin-top: auto;
 }
 
-/* WYKRESY */
+/* CHARTS */
 .chart-container-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -1129,7 +1121,7 @@ body {
   overflow: visible;
 }
 
-/* WSKAZNIKI RADIALNE */
+/* RADIAL GAUGES */
 .radial-gauges-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -1159,7 +1151,7 @@ body {
   color: var(--text-secondary);
 }
 
-/* SEKCJA ZALECEN I KART */
+/* RECOMMENDATIONS AND CARD SECTIONS */
 .card-section {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -1204,7 +1196,7 @@ body {
   line-height: 1.4;
 }
 
-/* FORMULARZE */
+/* FORMS */
 .form-vertical {
   display: flex;
   flex-direction: column;
@@ -1268,7 +1260,7 @@ body {
   border-radius: var(--radius-sm);
 }
 
-/* ZAKLADKA WYBORU ASTRONAUTY PRZEZ KIEROWNIKA */
+/* COMMANDER ASTRONAUT SELECTOR BAR */
 .astronaut-tab-row {
   display: flex;
   gap: 10px;
@@ -1318,7 +1310,7 @@ body {
   font-weight: 600;
 }
 
-/* KARTA BOHATERA SZCZEGOLOW */
+/* ASTRONAUT DETAIL HERO CARD */
 .detail-hero-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -1400,7 +1392,7 @@ body {
   line-height: 1.4;
 }
 
-/* INSTRUKCJE I PROFILAKTYKA */
+/* INSTRUCTIONS AND PROPHYLAXIS */
 .filter-bar-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -1460,29 +1452,6 @@ body {
   border-color: var(--primary-cyan);
 }
 
-.instructions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: 20px;
-}
-
-.instruction-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-}
-
-.inst-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
 .inst-category-chip {
   font-size: 11px;
   font-weight: 700;
@@ -1490,129 +1459,7 @@ body {
   color: var(--primary-cyan);
 }
 
-.inst-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: #ffffff;
-  margin-bottom: 14px;
-}
-
-.inst-body-block {
-  margin-bottom: 14px;
-}
-
-.inst-block-heading {
-  font-size: 12px;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-
-.instruction-steps-list {
-  padding-left: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.instruction-step-item {
-  font-size: 13px;
-  color: #cbd5e1;
-  line-height: 1.4;
-}
-
-.inst-rationale-box {
-  background: rgba(0, 0, 0, 0.2);
-  border-left: 3px solid var(--warning-amber);
-  padding: 10px 12px;
-  border-radius: 4px;
-  margin-bottom: 16px;
-}
-
-.rationale-heading {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--warning-amber);
-  margin-bottom: 4px;
-}
-
-.rationale-text {
-  font-size: 12px;
-  color: #94a3b8;
-  line-height: 1.4;
-}
-
-.inst-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: auto;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.inst-code {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
-/* MODUL MOTYWACJI */
-.mission-progress-banner {
-  background: linear-gradient(135deg, #10233f, #0d1726);
-  border: 1px solid rgba(0, 212, 255, 0.3);
-  border-radius: var(--radius-md);
-  padding: 24px;
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-
-.progress-info-col {
-  flex: 1;
-  min-width: 280px;
-}
-
-.banner-sub-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--primary-cyan);
-}
-
-.banner-main-title {
-  font-size: 22px;
-  font-weight: 800;
-  color: #ffffff;
-  margin: 4px 0 14px 0;
-}
-
-.progress-bar-track {
-  width: 100%;
-  height: 12px;
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 6px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  margin-bottom: 8px;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #00d4ff, #10b981);
-  border-radius: 6px;
-  transition: width 0.5s ease;
-}
-
-.progress-labels-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
+/* MOTIVATION MODULE */
 .safe-days-col {
   background: rgba(0, 0, 0, 0.25);
   padding: 16px 24px;
@@ -1692,34 +1539,7 @@ body {
   line-height: 1.4;
 }
 
-.quotes-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 14px;
-}
-
-.quote-card {
-  background: rgba(0, 0, 0, 0.2);
-  border-left: 3px solid var(--primary-cyan);
-  padding: 14px;
-  border-radius: var(--radius-sm);
-}
-
-.quote-text {
-  font-size: 13px;
-  font-style: italic;
-  color: #e2e8f0;
-  line-height: 1.5;
-  margin-bottom: 10px;
-}
-
-.quote-author {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--primary-cyan);
-}
-
-/* ANIMACJA CWICZEN ODDECHOWYCH */
+/* BREATHING EXERCISE ANIMATION */
 .breathing-display-box {
   display: flex;
   flex-direction: column;
@@ -1798,7 +1618,7 @@ body {
   line-height: 1.4;
 }
 
-/* TABELE DANYCH */
+/* DATA TABLES */
 .table-responsive {
   width: 100%;
   overflow-x: auto;
@@ -1961,7 +1781,7 @@ body {
   margin-top: 18px;
 }
 
-/* STOPKA */
+/* FOOTER */
 .app-footer {
   background: var(--bg-surface);
   border-top: 1px solid var(--border-color);
@@ -1985,7 +1805,7 @@ body {
   font-family: var(--font-mono);
 }
 
-/* EKRAN LOGOWANIA */
+/* LOGIN SCREEN */
 .login-wrapper {
   max-width: 1040px;
   margin: 30px auto;
@@ -2063,7 +1883,7 @@ body {
   text-align: center;
 }
 
-/* MODUL USTAWIAŃ */
+/* SETTINGS MODULE */
 .settings-desc-text {
   font-size: 13px;
   color: var(--text-secondary);
@@ -2168,7 +1988,7 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* FORMULARZ TELEMETRII */
+/* TELEMETRY ENTRY FORM */
 .telemetry-entry-form {
   display: flex;
   flex-direction: column;
@@ -2240,7 +2060,7 @@ body {
   border-radius: 4px;
 }
 
-/* MODAL ROZSZERZONY */
+/* EXTENDED MODAL */
 .modal-dialog-lg {
   max-width: 680px;
 }
@@ -2258,7 +2078,7 @@ body {
   text-transform: uppercase;
 }
 
-/* PASEK TRANSMISJI TELEMETRII NA ZYWO */
+/* LIVE TELEMETRY STREAM BAR */
 .telemetry-live-bar {
   display: flex;
   flex-wrap: wrap;
@@ -2364,7 +2184,7 @@ body {
   font-weight: 600;
 }
 
-/* ANIMACJA AKTUALIZACJI WARTOSCI NA ZYWO */
+/* LIVE VALUE UPDATE ANIMATION */
 @keyframes metricGlowBlue {
   0% { color: #38bdf8; text-shadow: 0 0 10px rgba(56, 189, 248, 0.8); }
   100% { color: inherit; text-shadow: none; }
@@ -2392,7 +2212,7 @@ body {
   animation: metricGlowCritical 0.85s ease-out;
 }
 
-/* PLYNNE PRZEJSCIE WYKRESOW SLUPKOWYCH SVG */
+/* SMOOTH SVG BAR CHART TRANSITION */
 .crew-bar-row rect {
   transition: width 0.45s ease-out, fill 0.45s ease-out;
 }
@@ -2401,7 +2221,7 @@ body {
   transition: x 0.45s ease-out;
 }
 
-/* PULS BIOMETRYCZNY */
+/* BIOMETRIC PULSE BEACON */
 .vital-heart-pulse {
   display: inline-block;
   color: #ef4444;
@@ -2418,7 +2238,7 @@ body {
   100% { transform: scale(1); }
 }
 
-/* STACJA ORBITALNA ECLSS KABINA */
+/* ORBITAL STATION ECLSS CABIN */
 .eclss-overview-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -2462,7 +2282,7 @@ body {
   margin-top: 2px;
 }
 
-/* TABELA POMIAROW OKRESOWYCH */
+/* PERIODIC DIAGNOSTICS TABLE */
 .periodic-tests-wrapper {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -2585,7 +2405,7 @@ body {
 }
 
 
-/* SUBNAWIGACJA W MODULE INSTRUKCJE I PROFILAKTYKA */
+/* INSTRUCTIONS AND PROPHYLAXIS SUBNAVIGATION */
 .instrukcje-subnav {
   display: flex;
   gap: 10px;
@@ -2620,7 +2440,7 @@ body {
   font-weight: 700;
 }
 
-/* KROK PO KROKU : SEKWENCYJNY ASYSTENT PROCEDURY */
+/* STEP BY STEP : SEQUENTIAL PROCEDURE WIZARD */
 .step-proc-container {
   display: grid;
   grid-template-columns: 1fr 340px;
@@ -2760,7 +2580,7 @@ body {
   opacity: 0.6;
 }
 
-/* HARMONOGRAM I KOLEJKA FIFO */
+/* SCHEDULE AND FIFO QUEUE */
 .countdown-banner-card {
   background: linear-gradient(135deg, rgba(6, 11, 19, 0.95), rgba(14, 165, 233, 0.12));
   border: 1px solid var(--border-highlight);
@@ -2833,7 +2653,7 @@ body {
   text-transform: uppercase;
 }
 
-/* KARTY ODCHYLEN OD NORMY I PROFILAKTYKI */
+/* DEVIATION AND PROPHYLAXIS CARDS */
 .prophylaxis-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
@@ -2867,7 +2687,7 @@ body {
   line-height: 1.5;
 }
 
-/* SCENARIUSZE KRYTYCZNE */
+/* CRITICAL EMERGENCY SCENARIOS */
 .critical-header-alert {
   background: rgba(239, 68, 68, 0.12);
   border: 1px solid #ef4444;
@@ -2903,7 +2723,7 @@ body {
   line-height: 1.5;
 }
 
-/* SZYBKI PODGLAD HARMONOGRAMU NA PULPICIE GLOWNYM */
+/* QUICK SCHEDULE PREVIEW ON MAIN DASHBOARD */
 .dashboard-quick-schedule-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -2930,7 +2750,7 @@ body {
   color: var(--primary-cyan);
 }
 
-/* PANEL MODELU PODSUMOWUJACEGO ML */
+/* ML SUMMARY MODEL PANEL */
 .model-summary-card {
   background: var(--bg-card);
   border: 1px solid rgba(0, 212, 255, 0.25);
@@ -3185,7 +3005,7 @@ body {
   color: var(--primary-cyan);
 }
 
-/* TRYB DZIENNY APLIKACJI */
+/* DAY THEME OVERRIDES */
 body.theme-day {
   --bg-deep: #eef3f8;
   --bg-surface: #ffffff;
@@ -3210,7 +3030,6 @@ body.theme-day {
 body.theme-day .app-header,
 body.theme-day .side-panel-card,
 body.theme-day .card-section,
-body.theme-day .metric-card,
 body.theme-day .model-summary-card,
 body.theme-day .vitalis-card {
   background: var(--bg-card);
@@ -3221,12 +3040,10 @@ body.theme-day .login-title,
 body.theme-day .view-title,
 body.theme-day .section-title-bar h2,
 body.theme-day .astro-card-name,
-body.theme-day .banner-main-title,
 body.theme-day .milestone-title {
   color: var(--text-primary);
 }
 
-body.theme-day .mission-progress-banner,
 body.theme-day .vitalis-balance-banner,
 body.theme-day .vitalis-readiness-card {
   background: linear-gradient(135deg, #e0f2fe, #f8fafc);
@@ -3234,7 +3051,6 @@ body.theme-day .vitalis-readiness-card {
   color: var(--text-primary);
 }
 
-body.theme-day .vitalis-stat-box,
 body.theme-day .vitalis-task-item,
 body.theme-day .vitalis-reward-card,
 body.theme-day .vitalis-rank-row,
@@ -3242,7 +3058,7 @@ body.theme-day .vitalis-health-card {
   background: #f8fafc;
 }
 
-/* PRZEBUDOWANY MODUL MOTYWACJI VITALIS */
+/* VITALIS MOTIVATION MODULE */
 .vitalis-topbar {
   display: flex;
   justify-content: space-between;

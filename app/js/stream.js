@@ -1,6 +1,6 @@
-// Silnik strumieniowania telemetrii medycznej w czasie rzeczywistym
+// Real-time medical telemetry streaming engine
 // HMS-of-A : Health Monitoring System of Astronauts
-// Uwaga: brak emotek, brak nawiasow w tekstach, brak dlugich myslnikow
+// Note: no emojis, no parentheses in UI strings, no long dashes
 
 const TelemetryStream = (function() {
   'use strict';
@@ -13,11 +13,11 @@ const TelemetryStream = (function() {
   let lastPacketTime = '';
   const listeners = [];
 
-  // Scenariusze symulacyjne
+  // Simulation scenarios
   const SCENARIOS = {
     resting: {
-      name: 'Spoczynek bazowy',
-      desc: 'Standardowe warunki spoczynkowe na stacji',
+      name: 'Baseline Rest',
+      desc: 'Standard resting conditions aboard the station',
       hrTarget: 68,
       hrRange: 4,
       spo2Target: 99,
@@ -30,8 +30,8 @@ const TelemetryStream = (function() {
       tempTarget: 36.6
     },
     training: {
-      name: 'Trening silowy ARED',
-      desc: 'Wysilek fizyczny o wysokiej intensywnosci',
+      name: 'ARED Strength Training',
+      desc: 'High-intensity resistance exercise session',
       hrTarget: 148,
       hrRange: 8,
       spo2Target: 97,
@@ -44,8 +44,8 @@ const TelemetryStream = (function() {
       tempTarget: 37.3
     },
     eva: {
-      name: 'Spacer kosmiczny EVA',
-      desc: 'Praca na zewnatrz stacji w skafandrze EMU',
+      name: 'EVA Spacewalk',
+      desc: 'Extravehicular activity outside the station in EMU suit',
       hrTarget: 96,
       hrRange: 6,
       spo2Target: 98,
@@ -58,8 +58,8 @@ const TelemetryStream = (function() {
       tempTarget: 36.7
     },
     anomaly: {
-      name: 'Symulacja anomalii kardiologicznej',
-      desc: 'Nagly epizod tachykardii i desaturacji u astronauty',
+      name: 'Cardiovascular Anomaly Simulation',
+      desc: 'Sudden tachycardia and desaturation episode in a crew member',
       hrTarget: 136,
       hrRange: 10,
       spo2Target: 93,
@@ -90,7 +90,7 @@ const TelemetryStream = (function() {
 
     const updatedAstroIds = [];
 
-    astronauts.forEach(function(a, index) {
+    astronauts.forEach(function(a) {
       if (!a.vitals) return;
 
       let astroSc = sc;
@@ -124,12 +124,12 @@ const TelemetryStream = (function() {
 
       const v = a.vitals;
 
-      // Plynne dazenie do wartosci docelowej z mikrodryfem
+      // Smooth convergence toward scenario target with micro-drift
       const hrDrift = (Math.random() * 2 - 1) * astroSc.hrRange * 0.4;
       const hrStep = Math.round((astroSc.hrTarget - v.hr) * 0.22 + hrDrift);
       v.hr = Math.max(45, Math.min(200, v.hr + hrStep));
 
-      // Obliczenie interwalu RR oraz zmiennosci rytmu HRV RMSSD
+      // Compute RR interval and HRV RMSSD variability
       v.rr = Math.round(60000 / v.hr);
       const hrvTarget = Math.max(20, Math.min(95, Math.round(100 - (v.stressLevel * 0.8))));
       v.hrv = Math.max(15, Math.min(120, Math.round(v.hrv + (hrvTarget - v.hrv) * 0.2 + (Math.random() * 2 - 1))));
@@ -139,18 +139,18 @@ const TelemetryStream = (function() {
       const spo2Rand = Math.random() > 0.7 ? (Math.random() > 0.5 ? 1 : -1) : 0;
       v.spo2 = Math.max(85, Math.min(100, v.spo2 + spo2Step + spo2Rand));
 
-      // Cisnienie skurczowe i rozkurczowe
+      // Systolic and diastolic blood pressure
       const bpSysStep = Math.round((astroSc.bpSysTarget - v.bpSys) * 0.18 + (Math.random() * 2 - 1));
       v.bpSys = Math.max(80, Math.min(210, v.bpSys + bpSysStep));
 
       const bpDiaStep = Math.round((astroSc.bpDiaTarget - v.bpDia) * 0.18 + (Math.random() * 2 - 1));
       v.bpDia = Math.max(50, Math.min(130, v.bpDia + bpDiaStep));
 
-      // Czestosc oddechowa
+      // Respiratory rate
       const respStep = Math.round((astroSc.respTarget - v.resp) * 0.2 + (Math.random() * 1.5 - 0.75));
       v.resp = Math.max(8, Math.min(36, v.resp + respStep));
 
-      // Poziom stresu
+      // Stress level
       const stressStep = Math.round((astroSc.stressTarget - v.stressLevel) * 0.18 + (Math.random() * 2 - 1));
       v.stressLevel = Math.max(5, Math.min(99, v.stressLevel + stressStep));
 
@@ -160,29 +160,29 @@ const TelemetryStream = (function() {
         v.bodyBattery = Math.max(5, Math.min(100, Math.round((v.bodyBattery + bbDelta + (Math.random() * 0.2 - 0.1)) * 10) / 10));
       }
 
-      // Radiacja
+      // Radiation dose accumulation
       v.radDose = Math.round((v.radDose + astroSc.radRate) * 1000) / 1000;
 
-      // Temperatura
+      // Skin body temperature
       const tempDelta = Math.round((astroSc.tempTarget - v.temp) * 0.15 * 10) / 10;
       v.temp = Math.max(35.5, Math.min(39.5, Math.round((v.temp + tempDelta + (Math.random() * 0.06 - 0.03)) * 10) / 10));
 
-      // Ocena ogolna statusu
+      // Overall status evaluation
       if (v.hr > 125 || v.spo2 < 95 || v.stressLevel > 74 || v.bpSys > 158) {
         a.overallStatus = 'critical';
-        a.statusLabel = 'Podwyzszone ryzyko';
-        a.statusDescription = 'Wykryto przekroczenie korytarza normy biometrycznej. Wymagana weryfikacja medyczna.';
+        a.statusLabel = 'Elevated Risk';
+        a.statusDescription = 'Biometric thresholds exceeded. Immediate medical verification required.';
       } else if (v.hr > 95 || v.spo2 < 97 || v.stressLevel > 48 || v.bpSys > 138) {
         a.overallStatus = 'warning';
-        a.statusLabel = 'Wymagana obserwacja';
-        a.statusDescription = 'Parametry fizjologiczne wskazuja na wzmozone obciazenie organizmu.';
+        a.statusLabel = 'Observation Required';
+        a.statusDescription = 'Physiological metrics indicate increased physiological strain.';
       } else {
         a.overallStatus = 'normal';
-        a.statusLabel = 'Stan stabilny';
-        a.statusDescription = 'Wszystkie biometryczne wskazniki pozostaja w zdefiniowanym korytarzu bezpieczenstwa.';
+        a.statusLabel = 'Stable Condition';
+        a.statusDescription = 'All biometric indicators remain within the defined safety envelope.';
       }
 
-      // Aktualizacja bufora odczytow biezacych
+      // Update live telemetry ring buffer
       if (!a.liveTelemetry) {
         a.liveTelemetry = [];
       }
@@ -209,7 +209,7 @@ const TelemetryStream = (function() {
     if (!isRunning) return;
 
     if (window.location.protocol.indexOf('http') === 0) {
-      // Pobieranie telemetrii na zywo z serwera Python
+      // Poll live telemetry from Python server
       fetch('/api/telemetry/live')
         .then(function(res) {
           if (!res.ok) throw new Error('HTTP status error');
@@ -241,7 +241,7 @@ const TelemetryStream = (function() {
                 crewSummary: data.crewSummary || (appState ? appState.crewSummary : null)
               });
             } catch (err) {
-              console.warn('Blad w listenerze strumienia telemetrii:', err);
+              console.warn('Telemetry stream listener error:', err);
             }
           });
         })
@@ -269,7 +269,7 @@ const TelemetryStream = (function() {
           crewSummary: appState.crewSummary || null
         });
       } catch (err) {
-        console.warn('Blad w listenerze strumienia telemetrii:', err);
+        console.warn('Telemetry stream listener error:', err);
       }
     });
   }
@@ -345,16 +345,16 @@ const TelemetryStream = (function() {
     const id = 'astro-garmin-' + Date.now();
     return {
       id: id,
-      name: 'Marek Kosmonauta',
+      name: 'Marek Orbit',
       role: '',
-      avatarCode: 'MK',
+      avatarCode: 'MO',
       age: 34,
       bloodType: '0 Rh plus',
       missionDay: 184,
       evaHours: 8,
       overallStatus: 'normal',
-      statusLabel: 'Stan stabilny',
-      statusDescription: 'Strumien biometryczny pobierany w czasie rzeczywistym z sensorow Garmin Elevate.',
+      statusLabel: 'Stable Condition',
+      statusDescription: 'Real-time biometric stream captured from Garmin Elevate optical sensors.',
       source: 'Garmin Health Telemetry Link',
       vitals: {
         hr: 68,
@@ -369,25 +369,25 @@ const TelemetryStream = (function() {
         spo2: 99,
         spo2Unit: '%',
         temp: 36.6,
-        tempUnit: 'st. C',
+        tempUnit: 'deg C',
         resp: 14,
-        respUnit: 'oddech/min',
+        respUnit: 'breaths/min',
         radDose: 3.2,
         radUnit: 'mSv',
         boneDensity: 99,
-        boneUnit: '% normy',
+        boneUnit: '% norm',
         muscleMass: 100,
-        muscleUnit: '% normy',
+        muscleUnit: '% norm',
         hydration: 96,
         hydrationUnit: '%',
         sleepHours: 7.9,
-        sleepUnit: 'godz.',
+        sleepUnit: 'h',
         sleepScore: 88,
-        sleepScoreUnit: 'pkt',
+        sleepScoreUnit: 'pts',
         stressLevel: 21,
-        stressUnit: 'pkt',
+        stressUnit: 'pts',
         bodyBattery: 88,
-        bodyBatteryUnit: 'pkt',
+        bodyBatteryUnit: 'pts',
         cortisol: 4.1,
         cortisolUnit: 'ng/ml',
         lactate: 1.5,
@@ -396,19 +396,19 @@ const TelemetryStream = (function() {
         cognitiveUnit: '%'
       },
       telemetryHistory: [
-        { day: 'Dzien 179', hr: 67, bpSys: 117, spo2: 99, stress: 22, rad: 2.8 },
-        { day: 'Dzien 180', hr: 69, bpSys: 118, spo2: 98, stress: 24, rad: 2.9 },
-        { day: 'Dzien 181', hr: 66, bpSys: 116, spo2: 99, stress: 20, rad: 3.0 },
-        { day: 'Dzien 182', hr: 70, bpSys: 119, spo2: 99, stress: 23, rad: 3.1 },
-        { day: 'Dzien 183', hr: 68, bpSys: 118, spo2: 99, stress: 21, rad: 3.1 },
-        { day: 'Dzien 184', hr: 68, bpSys: 118, spo2: 99, stress: 21, rad: 3.2 }
+        { day: 'Day 179', hr: 67, bpSys: 117, spo2: 99, stress: 22, rad: 2.8 },
+        { day: 'Day 180', hr: 69, bpSys: 118, spo2: 98, stress: 24, rad: 2.9 },
+        { day: 'Day 181', hr: 66, bpSys: 116, spo2: 99, stress: 20, rad: 3.0 },
+        { day: 'Day 182', hr: 70, bpSys: 119, spo2: 99, stress: 23, rad: 3.1 },
+        { day: 'Day 183', hr: 68, bpSys: 118, spo2: 99, stress: 21, rad: 3.1 },
+        { day: 'Day 184', hr: 68, bpSys: 118, spo2: 99, stress: 21, rad: 3.2 }
       ],
       orders: [
         {
           id: 'ord-g1',
           date: '2026-11-14',
           author: 'Marek Marczak',
-          text: 'Pomiary z czujnika Garmin zintegrowane prawidlowo z glowna szyna telemetrii HMS-of-A.',
+          text: 'Garmin sensor measurements integrated cleanly into the main HMS-of-A telemetry bus.',
           priority: 'standard'
         }
       ],
@@ -418,7 +418,7 @@ const TelemetryStream = (function() {
           trainedAred: true,
           trainedT2: true,
           vitalsLogged: true,
-          wellbeing: 'Pomiary optyczne stabilne, jakosc regeneracji nocnej oceniona na 88 procent.'
+          wellbeing: 'Optical sensor readings stable, overnight recovery rated at 88 percent.'
         }
       ]
     };

@@ -1,16 +1,16 @@
 """
-Model odchylen: analizuje wszystkie dostepne parametry i wskazuje obszary odchylone od normy.
+Deviation model: evaluates all available parameters and identifies out-of-norm domains.
 
-Trzy niezalezne kryteria oceny:
-  1. norma referencyjna - wartosc poza zakresem ze specyfikacji,
-  2. norma osobista - wartosc nietypowa dla tej osoby lub kabiny,
-  3. spojnosc sygnalow - reszta sieci anomalii wzgledem innych sygnalow.
+Three independent evaluation criteria:
+  1. Reference threshold - value outside specification range
+  2. Personal baseline - atypical value for this individual or cabin
+  3. Signal coherence - anomaly autoencoder residual relative to paired signals
 """
 from __future__ import annotations
 
 import math
 
-from . import normy as N
+from . import thresholds as N
 
 PROG_OBSZARU = 30.0
 PROG_PARAMETRU = 15.0
@@ -26,7 +26,7 @@ def _kierunek_normy(par: N.Parametr, v: float) -> str:
     normy = [(od, do) for od, do, st in par.przedzialy if st == "norma"]
     if not normy:
         return ""
-    return "za nisko" if v < min(od for od, _ in normy) else "za wysoko"
+    return "too low" if v < min(od for od, _ in normy) else "too high"
 
 
 def _tylko_zly_kierunek(par: N.Parametr, x: float | None) -> float | None:
@@ -48,30 +48,30 @@ def ocen_parametr(p: dict, z: float | None, typowa: float | None, reszta: float 
 
     d_norma = N.RYZYKO[p["status"]] * w_heur
     if p["status"] != "norma":
-        norm_opis = par.opis_norm or "zakres ze specyfikacji"
+        norm_opis = par.opis_norm or "specification range"
         powody.append({
             "typ": "norma",
             "kierunek": _kierunek_normy(par, p["wartosc"]),
-            "opis": f"poza norma referencyjna: {norm_opis}",
+            "opis": f"outside reference threshold: {norm_opis}",
         })
 
     d_os = _skala_z(z)
     if d_os > 0:
-        typ_txt = f"typowo {par.fmt(typowa)} {par.jednostka}, " if typowa is not None else ""
-        kier = "wyzej" if z > 0 else "nizej"
+        typ_txt = f"typically {par.fmt(typowa)} {par.jednostka}, " if typowa is not None else ""
+        kier = "higher" if z > 0 else "lower"
         powody.append({
             "typ": "osobista",
             "kierunek": kier,
-            "opis": f"{kier} niz zwykle: {typ_txt}{abs(z):.1f} odch. std.",
+            "opis": f"{kier} than usual: {typ_txt}{abs(z):.1f} std. dev.",
         })
 
     d_siec = _skala_z(reszta)
     if d_siec > 0:
-        kier_s = "wyzej" if reszta > 0 else "nizej"
+        kier_s = "higher" if reszta > 0 else "lower"
         powody.append({
             "typ": "siec",
             "kierunek": kier_s,
-            "opis": f"{kier_s}, niz wynika z pozostalych sygnalow",
+            "opis": f"{kier_s} than expected from paired signals",
         })
 
     wynik = max(d_norma, 0.8 * d_os, 0.8 * d_siec) * p.get("pewnosc", 1.0)
@@ -90,7 +90,7 @@ def ocen_parametr(p: dict, z: float | None, typowa: float | None, reszta: float 
 
 
 def analizuj(parametry: list[dict], baza, reszty: dict) -> list[dict]:
-    """Zwraca obszary z danymi, posortowane od najbardziej odchylonego."""
+    """Return active domains sorted from highest deviation score to lowest."""
     oceny = []
     for p in parametry:
         if p.get("niepewny") or p["klucz"] not in N.PARAMETRY:

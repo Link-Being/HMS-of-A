@@ -1,9 +1,9 @@
 """
-Siec anomalii: autoenkoder odszumiajacy uczacy sie normalnego stanu danej osoby i stacji bez etykiet.
+Anomaly network: unsupervised denoising autoencoder learning normal crew and station patterns.
 
-Architektura: wejscie -> 16 -> 4 -> 16 -> wyjscie, aktywacja tanh, maskowanie losowe wejsc.
-Dziala z biblioteka numpy jesli jest zainstalowana oraz w trybie w pelni natywnym Pythona
-bez zewnetrznych zaleznosci, korzystajac z tych samych wag JSON.
+Architecture: input -> 16 -> 4 -> 16 -> output with tanh activations and random input masking.
+Supports NumPy acceleration when installed as well as pure-Python inference and training
+without external dependencies, using shared JSON weight files.
 """
 from __future__ import annotations
 
@@ -154,7 +154,7 @@ class SiecAnomalii:
                     v[j] = 0.999 * v[j] + 0.001 * g * g
                     p -= lr * (m[j] / b1_corr) / (np.sqrt(v[j] / b2_corr) + 1e-8)
             if gadaj and (ep % 50 == 0 or ep == epoki - 1):
-                print(f"  epoka {ep + 1}/{epoki}: blad odtworzenia {suma / max(float(maska.sum()), 1.0):.4f}")
+                print(f"  epoch {ep + 1}/{epoki}: reconstruction loss {suma / max(float(maska.sum()), 1.0):.4f}")
 
         self.W = [w.tolist() for w in W_np]
         self.b = [b.tolist() for b in b_np]
@@ -266,7 +266,7 @@ class SiecAnomalii:
                         v_hat = vb[k][c_j] / b2_corr
                         self.b[k][c_j] -= lr * m_hat / (math.sqrt(v_hat) + 1e-8)
             if gadaj and (ep % 50 == 0 or ep == epoki - 1):
-                print(f"  epoka {ep + 1}/{epoki}: blad odtworzenia {suma / max(total_mask, 1):.4f}")
+                print(f"  epoch {ep + 1}/{epoki}: reconstruction loss {suma / max(total_mask, 1):.4f}")
 
         errs = []
         for row in X:
@@ -355,7 +355,7 @@ class SiecAnomalii:
 
 
 class BazaOnline:
-    """Zastepstwo przed treningiem sieci: srednia i odchylenie standardowe z biezacej sesji."""
+    """Fallback before network training: rolling session mean and standard deviation."""
 
     def __init__(self, cechy: list[str], min_probek: int = 30):
         self.cechy = list(cechy)
@@ -406,5 +406,5 @@ def wczytaj_lub_baza(sciezka: pathlib.Path, cechy: list[str]):
                 if list(model.cechy) == list(cechy):
                     return model
             except Exception as e:
-                print("Nie mozna wczytac sieci anomalii:", e)
+                print("Unable to load anomaly network:", e)
     return BazaOnline(cechy)

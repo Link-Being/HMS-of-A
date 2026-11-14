@@ -1,14 +1,14 @@
-// Modul wykresow telemetrycznych SVG dla HMS-of-A
-// Brak emotek, brak nawiasow w etykietach, brak dlugich myslnikow
+// SVG telemetry charting module for HMS-of-A
+// No emojis, no parentheses in labels, no long dashes
 
 const TelemetryCharts = {
-  // Rysuje liniowy wykres trendu parametru
+  // Renders a line trend chart for a telemetry metric
   renderLineChart: function(containerId, dataPoints, metricKey, metricLabel, unit) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
     if (!dataPoints || dataPoints.length === 0) {
-      container.innerHTML = '<div class="empty-chart">Brak danych telemetrycznych do wyswietlenia</div>';
+      container.innerHTML = '<div class="empty-chart">No telemetry data available to display</div>';
       return;
     }
 
@@ -23,7 +23,7 @@ const TelemetryCharts = {
     let minVal = Math.min.apply(null, values);
     let maxVal = Math.max.apply(null, values);
 
-    // Dodanie marginesu pionowego
+    // Add vertical margin
     const span = (maxVal - minVal) || 10;
     minVal = Math.floor(minVal - span * 0.15);
     maxVal = Math.ceil(maxVal + span * 0.15);
@@ -41,7 +41,7 @@ const TelemetryCharts = {
       return paddingTop + plotH - ratio * plotH;
     };
 
-    // Budowanie sciezki SVG
+    // Build SVG polyline and area paths
     let pathD = '';
     let areaD = '';
     const pointsList = [];
@@ -63,7 +63,7 @@ const TelemetryCharts = {
     const lastX = getX(dataPoints.length - 1);
     areaD += ' L ' + lastX + ' ' + (paddingTop + plotH) + ' Z';
 
-    // Linie siatki poziomej
+    // Horizontal gridlines
     const gridCount = 4;
     let gridLinesHtml = '';
     for (let g = 0; g <= gridCount; g++) {
@@ -76,7 +76,7 @@ const TelemetryCharts = {
       `;
     }
 
-    // Punkty i etykiety osi X
+    // Data point markers and X-axis labels
     let pointsHtml = '';
     let xLabelsHtml = '';
     const labelStep = Math.max(1, Math.floor(pointsList.length / 6));
@@ -114,13 +114,13 @@ const TelemetryCharts = {
     container.innerHTML = svg;
   },
 
-  // Rysuje wykres slupkowy porownania zalogi dla kierownika
+  // Renders crew bar comparison chart for the commander
   renderCrewComparison: function(containerId, astronauts, metricKey, metricName, unit) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
     if (!astronauts || astronauts.length === 0) {
-      container.innerHTML = '<div class="empty-chart">Brak danych zalogi do wyswietlenia</div>';
+      container.innerHTML = '<div class="empty-chart">No crew data available to display</div>';
       return;
     }
 
@@ -168,7 +168,7 @@ const TelemetryCharts = {
     container.innerHTML = svg;
   },
 
-  // Rysuje pierscieniowy wskaznik biometryczny
+  // Renders circular biometric gauge
   renderRadialGauge: function(containerId, value, maxValue, label, unit, statusColor) {
     const container = document.getElementById(containerId);
     if (!container) return;

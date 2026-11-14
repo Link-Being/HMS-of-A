@@ -20,8 +20,8 @@ dist/
 *.egg-info/
 
 # Runtime telemetry logs and per-astronaut baselines generated at runtime
-dane/bazy_osobiste/
-dane/historia_log.csv
+app/data/personal_baselines/
+app/data/history_log.csv
 *.log
 *.tmp
 *.bak

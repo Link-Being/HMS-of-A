@@ -4,25 +4,25 @@ Health Monitoring System of Astronauts - a web-based medical telemetry, cabin en
 
 ## Overview
 
-HMS-of-A combines a Flask telemetry backend, a multi-criteria physiological and environmental scoring engine, and a zero-dependency vanilla JavaScript dashboard designed for mission commanders and individual astronauts on the Horyzont Jeden orbital station.
+HMS-of-A combines a Flask telemetry backend, a multi-criteria physiological and environmental scoring engine, and a zero-dependency vanilla JavaScript dashboard designed for mission commanders and individual astronauts on the Horizon One orbital station.
 
 Key capabilities:
-- Real-time crew biometrics and ECLSS cabin environment streaming backed by NASA OSDR RR-1 telemetry in `dane/osdr_RR1.json`
+- Real-time crew biometrics and ECLSS cabin environment streaming backed by NASA OSDR RR-1 telemetry in `app/data/osdr_RR1.json`
 - Multi-criteria health assessment across 20 parameters and 7 medical domains combining reference norms, adaptive personal baselines, and a denoising autoencoder
 - Role-based authentication with full-fleet oversight for the Commander and personal medical dashboards for crew members
 - Interactive SVG trend charts, radial gauges, step-by-step diagnostic procedures, microgravity prophylaxis guidelines, and critical emergency protocols
-- Switchable `demo` and `real` operational modes, manual telemetry entry, simulated Garmin profile import, and plain-text diagnostic report export
+- Switchable `demo` and `real` operational modes, manual telemetry entry, simulated Garmin profile import, and plain-text clinical report export
 
 ## Architecture and Health Model
 
-The `model/` package evaluates incoming crew and cabin telemetry without requiring heavy external ML frameworks:
+The `app/model/` package evaluates incoming crew and cabin telemetry without requiring heavy external ML frameworks:
 
-- `model/normy.py` - Reference thresholds classified as `norma`, `uwaga`, or `alarm` across 7 domains: ECLSS cabin environment, cardiovascular and respiratory, sleep and recovery, stress and workload, activity and endurance, sweat biochemistry, and EEG cognitive readiness
-- `model/baza_osobista.py` - Exponentially weighted personal and cabin baselines stored per astronaut in `dane/bazy_osobiste/`, updated only during in-norm readings to prevent baseline drift during alerts
-- `model/anomalie.py` - Unsupervised denoising autoencoder with `11 -> 16 -> 4 -> 16 -> 11` `tanh` architecture loaded from `dane/anomalie.json` with pure-Python inference and optional NumPy acceleration, falling back to `BazaOnline` session statistics when untrained
-- `model/odchylenia.py` and `model/stan.py` - Combines reference threshold violations, personal z-scores, and autoencoder reconstruction residuals into smoothed readiness indices `0-100` with hysteresis and dwell timers to prevent alert flickering
-- `model/raport.py` - Generates structured Polish-language clinical summary reports with cross-signal correlation rules such as elevated CO2 with reduced cognitive readiness or elevated stress with suppressed HRV
-- `model/ucz_anomalie.py` - Offline training CLI for retraining `dane/anomalie.json` from `dane/historia_pomiarow.csv` and `dane/osdr_RR1.json`
+- `app/model/thresholds.py` - Reference thresholds classified as `norma`, `uwaga`, or `alarm` across 7 domains: ECLSS cabin environment, cardiovascular and respiratory, sleep and recovery, stress and workload, activity and endurance, sweat biochemistry, and EEG cognitive readiness
+- `app/model/personal_baseline.py` - Exponentially weighted personal and cabin baselines stored per astronaut in `app/data/personal_baselines/`, updated only during in-norm readings to prevent baseline drift during alerts
+- `app/model/anomaly_model.py` - Unsupervised denoising autoencoder with `11 -> 16 -> 4 -> 16 -> 11` `tanh` architecture loaded from `app/data/anomalies.json` with pure-Python inference and optional NumPy acceleration, falling back to `BazaOnline` session statistics when untrained
+- `app/model/deviations.py` and `app/model/state.py` - Combines reference threshold violations, personal z-scores, and autoencoder reconstruction residuals into smoothed readiness indices `0-100` with hysteresis and dwell timers to prevent alert flickering
+- `app/model/report.py` - Generates structured English-language clinical summary reports with cross-signal correlation rules such as elevated CO2 with reduced cognitive readiness or elevated stress with suppressed HRV
+- `app/model/train_anomalies.py` - Offline training CLI for retraining `app/data/anomalies.json` from `app/data/telemetry_history.csv` and `app/data/osdr_RR1.json`
 
 ## Quick Start
 
@@ -34,30 +34,31 @@ The `model/` package evaluates incoming crew and cabin telemetry without requiri
 
 ### Running the Application
 
-1. Start the backend server:
+1. Start the backend server from the repository root or from `app/`:
 
 ```bash
-python app.py
+python app/app.py
 ```
 
-On Windows, double-click `start-server.bat` or `run-app.bat` to launch the Flask server on port `5000` and open the dashboard automatically. Set the `PORT` environment variable to override the default port.
+On Windows, double-click `app/start-server.bat` to launch the Flask server on port `5000` and open the dashboard automatically. Set the `PORT` environment variable to override the default port.
 
 2. Open `http://localhost:5000/` in your browser.
 
-3. Alternatively, open `index.html` directly in a browser for standalone client-side simulation. Standalone mode uses `localStorage` and client-side simulation in `js/stream.js`; backend model scoring, NASA OSDR playback, and `/api/raport.txt` export require running `app.py`.
+3. Alternatively, open `app/index.html` directly in a browser for standalone client-side simulation. Standalone mode uses `localStorage` and client-side simulation in `app/js/stream.js`; backend model scoring, NASA OSDR playback, and `/api/raport.txt` export require running `app/app.py`.
 
 ### Retraining the Anomaly Network
 
 ```bash
-python -m model.ucz_anomalie --dane dane --epoki 180
+cd app
+python -m model.train_anomalies --data data --epochs 180
 ```
 
 ### Compliance Check
 
-Repository files follow formatting rules enforced by `test-compliance.ps1` - no emojis, no en-dashes or em-dashes, and no parentheses in `.html` or `.md` files:
+Repository files follow formatting rules enforced by `app/test-compliance.ps1` - no emojis, no en-dashes or em-dashes, and no parentheses in `.html` or `.md` files:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\test-compliance.ps1
+powershell -ExecutionPolicy Bypass -File .\app\test-compliance.ps1
 ```
 
 ## Operational Modes and Accounts
@@ -77,8 +78,9 @@ The application starts in `demo` mode by default with a preconfigured 6-person r
 
 - **Main Dashboard**: Commander fleet summary, real-time ECLSS cabin readouts, prioritized crew status, or personal astronaut vitals and medical orders
 - **Crew and Telemetry / My Medical Data**: Live 12-metric telemetry cards, interactive SVG time-series charts, radial gauges for bone density, muscle mass, hydration, and stress, plus periodic diagnostic test history
+- **Daily Schedule**: Dedicated daily schedule view ready for mission planning entries
 - **Instructions and Prophylaxis**: Interactive step-by-step measurement procedures, overdue FIFO test queue and countdown timer, microgravity prevention guidelines, and critical emergency protocols
-- **Motivation Module**: Mission progress tracking, crew rankings, rewards, guided breathing exercises, and night/day theme switcher
+- **Motivation Module**: Wellbeing readiness panel, body silhouette feedback, parameter stability summary, active daily tasks, rewards, crew rankings, guided breathing exercises, and night/day theme switcher
 - **Event Log**: Chronological registry of medical orders issued by the Commander and daily crew check-in reports
 - **Settings**: Operational mode switching, mission reset, user and astronaut management, manual telemetry entry, and simulated Garmin profile import
 
@@ -102,15 +104,17 @@ The background stream supports four scenarios selectable in the live control bar
 
 ## Project Structure
 
-- `app.py` - Flask web server, background telemetry worker, model integration, and REST API
-- `index.html` - Single-page web application shell
-- `css/style.css` - Mission-control stylesheet with night and day themes
-- `js/data.js` - Initial crew roster, diagnostic tests, schedules, and prophylaxis knowledge base
-- `js/stream.js` - Backend live telemetry poller and offline client-side simulator
-- `js/charts.js` - Vector SVG line charts, crew bar charts, and radial gauges
-- `js/app.js` - UI views, authentication, forms, filtering, and state management
-- `model/` - Health scoring package: `normy.py`, `baza_osobista.py`, `anomalie.py`, `odchylenia.py`, `stan.py`, `raport.py`, `ucz_anomalie.py`
-- `dane/` - Datasets and trained weights: `osdr_RR1.json`, `baza_stacji.json`, `anomalie.json`, `historia_pomiarow.csv`
-- `assets/` - Application logo and favicon in SVG and PNG formats
-- `start-server.bat`, `run-app.bat` - Windows startup scripts
-- `test-compliance.ps1` - Formatting compliance check script
+- `README.md` - Project documentation at repository root
+- `local_camera_models/` - Dedicated directory reserved for local camera vision models
+- `app/app.py` - Flask web server, background telemetry worker, model integration, and REST API
+- `app/index.html` - Single-page web application shell
+- `app/css/style.css` - Mission-control stylesheet with night and day themes
+- `app/js/data.js` - Initial crew roster, diagnostic tests, schedules, and prophylaxis knowledge base
+- `app/js/stream.js` - Backend live telemetry poller and offline client-side simulator
+- `app/js/charts.js` - Vector SVG line charts, crew bar charts, and radial gauges
+- `app/js/app.js` - UI views, authentication, forms, filtering, and state management
+- `app/model/` - Health scoring package: `thresholds.py`, `personal_baseline.py`, `anomaly_model.py`, `deviations.py`, `state.py`, `report.py`, `train_anomalies.py`
+- `app/data/` - Datasets and trained weights: `osdr_RR1.json`, `station_baseline.json`, `anomalies.json`, `telemetry_history.csv`
+- `app/assets/` - Application logo and favicon in SVG and PNG formats
+- `app/start-server.bat` - Windows startup script
+- `app/test-compliance.ps1` - Formatting compliance check script

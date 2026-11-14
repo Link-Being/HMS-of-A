@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-# Plik serwera aplikacji webowej HMS-of-A
+# Web application server for HMS-of-A
 # Health Monitoring System of Astronauts
-# Uwaga: brak emotek, brak nawiasow w tekstach, brak dlugich myslnikow
+# Note: no emojis, no parentheses in UI strings, no long dashes
 
 import copy
 import math
 import os
 import pathlib
-import sys
 import json
 import time
 import random
@@ -15,9 +14,11 @@ import threading
 from datetime import datetime, timezone
 from flask import Flask, Response, send_from_directory, jsonify, request
 
-from model import Centrum, normy as N, raport_jako_tekst, status_na_ui
+from model import Centrum, raport_jako_tekst, status_na_ui
 
-app = Flask(__name__, static_folder=".")
+BASE_DIR = pathlib.Path(__file__).resolve().parent
+
+app = Flask(__name__, static_folder=str(BASE_DIR))
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
 
@@ -31,12 +32,11 @@ def disable_client_cache(response):
 state_lock = threading.Lock()
 stop_event = threading.Event()
 
-BASE_DIR = pathlib.Path(__file__).resolve().parent
-DANE_DIR = BASE_DIR / "dane"
-PLIK_SIECI = DANE_DIR / "anomalie.json"
+DANE_DIR = BASE_DIR / "data"
+PLIK_SIECI = DANE_DIR / "anomalies.json"
 OSDR_FILE = DANE_DIR / "osdr_RR1.json"
-BAZA_STACJI_FILE = DANE_DIR / "baza_stacji.json"
-BAZY_OSOBISTE_DIR = DANE_DIR / "bazy_osobiste"
+BAZA_STACJI_FILE = DANE_DIR / "station_baseline.json"
+BAZY_OSOBISTE_DIR = DANE_DIR / "personal_baselines"
 
 
 def _load_json_safe(path: pathlib.Path, default):
@@ -54,7 +54,7 @@ osdr_cursor = {"idx": 0}
 
 
 def build_initial_eclss() -> dict:
-    """Buduje poczatkowy stan srodowiska kabiny z realnych danych ISS OSDR oraz bazy stacji."""
+    """Builds initial cabin environmental state from real ISS OSDR telemetry and station baseline data."""
     rec = OSDR_RECORDS[0] if OSDR_RECORDS else {}
     rad_base = float(STATION_BASELINE.get("promieniowanie_dobowe", {}).get("sr", 0.21))
     return {
@@ -68,16 +68,16 @@ def build_initial_eclss() -> dict:
         "sourceTime": rec.get("time", "OSDR RR-1")
     }
 
-# Konta uzytkownikow w trybie demonstracyjnym
+# Demo mode user accounts
 DEMO_USERS = [
     {
         "id": "kierownik",
         "login": "marczak",
         "password": "marczak2026",
         "name": "Marek Marczak",
-        "role": "Kierownik",
+        "role": "Commander",
         "title": "",
-        "accessLevel": "Nadzor pelny",
+        "accessLevel": "Full oversight",
         "avatarCode": "MM"
     },
     {
@@ -87,7 +87,7 @@ DEMO_USERS = [
         "name": "Adam Kolosa",
         "role": "",
         "title": "",
-        "accessLevel": "Konto osobiste",
+        "accessLevel": "Personal account",
         "avatarCode": "AK"
     },
     {
@@ -97,7 +97,7 @@ DEMO_USERS = [
         "name": "Michał Pawlak",
         "role": "",
         "title": "",
-        "accessLevel": "Konto osobiste",
+        "accessLevel": "Personal account",
         "avatarCode": "MP"
     },
     {
@@ -107,7 +107,7 @@ DEMO_USERS = [
         "name": "Krzysztof Mysior",
         "role": "",
         "title": "",
-        "accessLevel": "Konto osobiste",
+        "accessLevel": "Personal account",
         "avatarCode": "KM"
     },
     {
@@ -117,7 +117,7 @@ DEMO_USERS = [
         "name": "Jan Hopperl",
         "role": "",
         "title": "",
-        "accessLevel": "Konto osobiste",
+        "accessLevel": "Personal account",
         "avatarCode": "JH"
     },
     {
@@ -127,12 +127,12 @@ DEMO_USERS = [
         "name": "Wojciech Skrzypczak",
         "role": "",
         "title": "",
-        "accessLevel": "Konto osobiste",
+        "accessLevel": "Personal account",
         "avatarCode": "WS"
     }
 ]
 
-# Astronauci w trybie demonstracyjnym
+# Demo mode astronauts
 DEMO_ASTRONAUTS = [
     {
         "id": "astro-1",
@@ -144,24 +144,24 @@ DEMO_ASTRONAUTS = [
         "missionDay": 184,
         "evaHours": 34,
         "overallStatus": "normal",
-        "statusLabel": "Stan stabilny",
-        "statusDescription": "Wszystkie biometryczne wskazniki pozostaja w zdefiniowanym korytarzu bezpieczenstwa.",
+        "statusLabel": "Stable Condition",
+        "statusDescription": "All biometric indicators remain within the defined safety envelope.",
         "vitals": {
             "hr": 68, "hrUnit": "bpm",
             "rr": 882, "rrUnit": "ms",
             "hrv": 64, "hrvUnit": "ms",
             "bpSys": 120, "bpDia": 80, "bpUnit": "mmHg",
             "spo2": 99, "spo2Unit": "%",
-            "temp": 36.6, "tempUnit": "st. C",
-            "resp": 14, "respUnit": "oddech/min",
-            "stressLevel": 24, "stressUnit": "pkt",
-            "bodyBattery": 85, "bodyBatteryUnit": "pkt",
+            "temp": 36.6, "tempUnit": "deg C",
+            "resp": 14, "respUnit": "breaths/min",
+            "stressLevel": 24, "stressUnit": "pts",
+            "bodyBattery": 85, "bodyBatteryUnit": "pts",
             "radDose": 14.2, "radUnit": "mSv",
-            "boneDensity": 97, "boneUnit": "% normy",
-            "muscleMass": 98, "muscleUnit": "% normy",
+            "boneDensity": 97, "boneUnit": "% norm",
+            "muscleMass": 98, "muscleUnit": "% norm",
             "hydration": 95, "hydrationUnit": "%",
-            "sleepHours": 7.8, "sleepUnit": "godz.",
-            "sleepScore": 88, "sleepScoreUnit": "pkt",
+            "sleepHours": 7.8, "sleepUnit": "h",
+            "sleepScore": 88, "sleepScoreUnit": "pts",
             "cortisol": 4.2, "cortisolUnit": "ng/ml",
             "lactate": 1.8, "lactateUnit": "mmol/l",
             "cognitiveReadiness": 92, "cognitiveUnit": "%"
@@ -169,100 +169,100 @@ DEMO_ASTRONAUTS = [
         "periodicTests": [
             {
                 "id": "pt-101",
-                "category": "Kardiologia i cisnienie",
-                "parameter": "Cisnienie tetnicze krwi i 3-kanalowe EKG",
-                "equipment": "Kamizelka Astroskin Bio-Monitor",
-                "result": "120 na 80 mmHg, rytm zatokowy miarowy, bez cech niedokrwienia",
+                "category": "Cardiology and Blood Pressure",
+                "parameter": "Arterial blood pressure and 3-lead ECG",
+                "equipment": "Astroskin Bio-Monitor Vest",
+                "result": "120/80 mmHg, regular sinus rhythm, no signs of ischemia",
                 "date": "14.11.2026",
                 "time": "07:15",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-102",
-                "category": "Analiza snu",
-                "parameter": "Czas i fazy snu oraz Sleep Score",
-                "equipment": "Opaska biometryczna Actiwatch",
-                "result": "7.8 godz. calkowitego snu, faza gleboka 21 %, REM 24 %, lekki 55 %, Sleep Score: 88 na 100 pkt",
+                "category": "Sleep Analysis",
+                "parameter": "Sleep duration, sleep stages, and Sleep Score",
+                "equipment": "Actiwatch Biometric Band",
+                "result": "7.8 h total sleep, deep 21 %, REM 24 %, light 55 %, Sleep Score: 88/100 pts",
                 "date": "14.11.2026",
                 "time": "06:30",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-103",
-                "category": "Wydolnosc fizyczna",
-                "parameter": "Pulap tlenowy VO2 max i wydatek energii",
-                "equipment": "Garmin pulsometr wydolnosciowy",
-                "result": "52.4 ml/kg/min, wydolnosc bardzo wysoka, Body Battery poranny 88 pkt",
+                "category": "Physical Performance",
+                "parameter": "VO2 max aerobic capacity and energy expenditure",
+                "equipment": "Garmin Performance Heart Rate Monitor",
+                "result": "52.4 ml/kg/min, very high fitness, morning Body Battery 88 pts",
                 "date": "13.11.2026",
                 "time": "16:45",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-104",
-                "category": "Trening oporowy i aerobowy",
-                "parameter": "Sesja treningowa ARED oraz bieznik T2",
-                "equipment": "Stanowisko treningowe ISS ARED i T2",
-                "result": "Przysiady i ciag 142 kg, bieznik moc 210 W, czas 120 min, srednie tetno 138 bpm",
+                "category": "Resistance and Aerobic Training",
+                "parameter": "ARED resistance and T2 treadmill session",
+                "equipment": "ISS ARED and T2 Training Station",
+                "result": "Squats and deadlift 142 kg, treadmill 210 W, duration 120 min, avg HR 138 bpm",
                 "date": "14.11.2026",
                 "time": "11:30",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-105",
-                "category": "Biochemia potu",
-                "parameter": "Biomarkery potu: Kortyzol, mleczany, Na, K, Ca, CRP",
-                "equipment": "Plaster biometryczny Bio-Patch sensor",
-                "result": "Kortyzol 4.2 ng/ml, mleczany 1.8 mmol/l, Na 48 mmol/l, K 4.6 mmol/l, Ca 1.2 mmol/l, CRP 0.8 mg/l",
+                "category": "Sweat Biochemistry",
+                "parameter": "Sweat biomarkers: Cortisol, lactate, Na, K, Ca, CRP",
+                "equipment": "Bio-Patch Microfluidic Biosensor",
+                "result": "Cortisol 4.2 ng/ml, lactate 1.8 mmol/l, Na 48 mmol/l, K 4.6 mmol/l, Ca 1.2 mmol/l, CRP 0.8 mg/l",
                 "date": "14.11.2026",
                 "time": "12:45",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-106",
-                "category": "Aktywnosc miesniowa sEMG",
-                "parameter": "Zmeczenie miesni i mikrodrzenia sEMG Fibre-WBAN",
-                "equipment": "Paski sensorowe Fibre-WBAN",
-                "result": "Stan optymalny brak zmeczenia, MDF 78 Hz, pasmo 10 - 200 Hz, ZCR w normie spoczynkowej",
+                "category": "sEMG Muscle Activity",
+                "parameter": "Muscle fatigue and micro-tremor sEMG Fibre-WBAN",
+                "equipment": "Fibre-WBAN Sensor Straps",
+                "result": "Optimal state, no fatigue, MDF 78 Hz, band 10 - 200 Hz, ZCR at resting baseline",
                 "date": "14.11.2026",
                 "time": "11:50",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-107",
-                "category": "Uklad nerwowy CNS",
-                "parameter": "Indeks gotowosci poznawczej i fale mozgu EEG",
-                "equipment": "Opaska EEG neuro-sensor",
-                "result": "Indeks gotowosci poznawczej 92 %, stopien skupienia wysoki, rytm alfa zrownowazony",
+                "category": "Central Nervous System CNS",
+                "parameter": "Cognitive readiness index and EEG brainwaves",
+                "equipment": "EEG Neuro-Sensor Headband",
+                "result": "Cognitive readiness index 92 %, high focus level, balanced alpha rhythm",
                 "date": "14.11.2026",
                 "time": "09:20",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-108",
-                "category": "Dozymetria radiacyjna",
-                "parameter": "Ekspozycja radiacyjna dobowa i skumulowana",
-                "equipment": "Dozymetr pokladowy RAD-ISS",
-                "result": "Dawka dobowa 0.42 mSv, laczna dawka skumulowana 14.2 mSv, ponizej limitu operacyjnego",
+                "category": "Radiation Dosimetry",
+                "parameter": "Daily and cumulative radiation exposure",
+                "equipment": "Onboard RAD-ISS Dosimeter",
+                "result": "Daily dose 0.42 mSv, total cumulative dose 14.2 mSv, below operational limit",
                 "date": "14.11.2026",
                 "time": "12:00",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             }
         ],
         "telemetryHistory": [
-            {"day": "Dzien 179", "hr": 69, "bpSys": 121, "spo2": 99, "stress": 26, "rad": 13.7},
-            {"day": "Dzien 180", "hr": 71, "bpSys": 122, "spo2": 98, "stress": 30, "rad": 13.8},
-            {"day": "Dzien 181", "hr": 67, "bpSys": 119, "spo2": 99, "stress": 22, "rad": 13.9},
-            {"day": "Dzien 182", "hr": 70, "bpSys": 120, "spo2": 99, "stress": 25, "rad": 14.0},
-            {"day": "Dzien 183", "hr": 66, "bpSys": 118, "spo2": 99, "stress": 21, "rad": 14.1},
-            {"day": "Dzien 184", "hr": 68, "bpSys": 120, "spo2": 99, "stress": 24, "rad": 14.2}
+            {"day": "Day 179", "hr": 69, "bpSys": 121, "spo2": 99, "stress": 26, "rad": 13.7},
+            {"day": "Day 180", "hr": 71, "bpSys": 122, "spo2": 98, "stress": 30, "rad": 13.8},
+            {"day": "Day 181", "hr": 67, "bpSys": 119, "spo2": 99, "stress": 22, "rad": 13.9},
+            {"day": "Day 182", "hr": 70, "bpSys": 120, "spo2": 99, "stress": 25, "rad": 14.0},
+            {"day": "Day 183", "hr": 66, "bpSys": 118, "spo2": 99, "stress": 21, "rad": 14.1},
+            {"day": "Day 184", "hr": 68, "bpSys": 120, "spo2": 99, "stress": 24, "rad": 14.2}
         ],
         "orders": [],
         "dailyChecks": []
@@ -277,24 +277,24 @@ DEMO_ASTRONAUTS = [
         "missionDay": 184,
         "evaHours": 26,
         "overallStatus": "normal",
-        "statusLabel": "Stan wzorowy",
-        "statusDescription": "Znakomita adaptacja metaboliczna i sercowo naczyniowa. Rezerwy energii wysokie.",
+        "statusLabel": "Optimal Condition",
+        "statusDescription": "Excellent metabolic and cardiovascular adaptation. Energy reserves remain high.",
         "vitals": {
             "hr": 65, "hrUnit": "bpm",
             "rr": 923, "rrUnit": "ms",
             "hrv": 72, "hrvUnit": "ms",
             "bpSys": 118, "bpDia": 78, "bpUnit": "mmHg",
             "spo2": 99, "spo2Unit": "%",
-            "temp": 36.5, "tempUnit": "st. C",
-            "resp": 13, "respUnit": "oddech/min",
-            "stressLevel": 20, "stressUnit": "pkt",
-            "bodyBattery": 88, "bodyBatteryUnit": "pkt",
+            "temp": 36.5, "tempUnit": "deg C",
+            "resp": 13, "respUnit": "breaths/min",
+            "stressLevel": 20, "stressUnit": "pts",
+            "bodyBattery": 88, "bodyBatteryUnit": "pts",
             "radDose": 15.1, "radUnit": "mSv",
-            "boneDensity": 98, "boneUnit": "% normy",
-            "muscleMass": 97, "muscleUnit": "% normy",
+            "boneDensity": 98, "boneUnit": "% norm",
+            "muscleMass": 97, "muscleUnit": "% norm",
             "hydration": 96, "hydrationUnit": "%",
-            "sleepHours": 8.0, "sleepUnit": "godz.",
-            "sleepScore": 92, "sleepScoreUnit": "pkt",
+            "sleepHours": 8.0, "sleepUnit": "h",
+            "sleepScore": 92, "sleepScoreUnit": "pts",
             "cortisol": 3.8, "cortisolUnit": "ng/ml",
             "lactate": 1.4, "lactateUnit": "mmol/l",
             "cognitiveReadiness": 95, "cognitiveUnit": "%"
@@ -302,100 +302,100 @@ DEMO_ASTRONAUTS = [
         "periodicTests": [
             {
                 "id": "pt-201",
-                "category": "Kardiologia i cisnienie",
-                "parameter": "Cisnienie tetnicze krwi i 3-kanalowe EKG",
-                "equipment": "Kamizelka Astroskin Bio-Monitor",
-                "result": "118 na 78 mmHg, rytm miarowy, zalamki prawidlowe",
+                "category": "Cardiology and Blood Pressure",
+                "parameter": "Arterial blood pressure and 3-lead ECG",
+                "equipment": "Astroskin Bio-Monitor Vest",
+                "result": "118/78 mmHg, regular rhythm, normal waveforms",
                 "date": "14.11.2026",
                 "time": "07:20",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-202",
-                "category": "Analiza snu",
-                "parameter": "Czas i fazy snu oraz Sleep Score",
-                "equipment": "Opaska biometryczna Actiwatch",
-                "result": "8.0 godz. snu, gleboki 23 %, REM 25 %, wybudzenia 0, Sleep Score: 92 na 100 pkt",
+                "category": "Sleep Analysis",
+                "parameter": "Sleep duration, sleep stages, and Sleep Score",
+                "equipment": "Actiwatch Biometric Band",
+                "result": "8.0 h total sleep, deep 23 %, REM 25 %, awakenings 0, Sleep Score: 92/100 pts",
                 "date": "14.11.2026",
                 "time": "06:35",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-203",
-                "category": "Wydolnosc fizyczna",
-                "parameter": "Pulap tlenowy VO2 max i wydatek energii",
-                "equipment": "Garmin pulsometr wydolnosciowy",
-                "result": "54.1 ml/kg/min, wydolnosc wyczynowa, status regeneracji Balanced",
+                "category": "Physical Performance",
+                "parameter": "VO2 max aerobic capacity and energy expenditure",
+                "equipment": "Garmin Performance Heart Rate Monitor",
+                "result": "54.1 ml/kg/min, athletic capacity, recovery status Balanced",
                 "date": "13.11.2026",
                 "time": "17:00",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-204",
-                "category": "Trening oporowy i aerobowy",
-                "parameter": "Sesja treningowa ARED oraz rower CEVIS",
-                "equipment": "Stanowisko treningowe ARED i cykloergometr CEVIS",
-                "result": "Trening silowy 135 kg, moc ergometru 195 W, czas 120 min, tetno srednie 132 bpm",
+                "category": "Resistance and Aerobic Training",
+                "parameter": "ARED resistance and CEVIS ergometer session",
+                "equipment": "ARED Station and CEVIS Cycle Ergometer",
+                "result": "Strength training 135 kg, ergometer 195 W, duration 120 min, avg HR 132 bpm",
                 "date": "14.11.2026",
                 "time": "10:45",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-205",
-                "category": "Biochemia potu",
-                "parameter": "Biomarkery potu: Kortyzol, mleczany, elektrolity, CRP",
-                "equipment": "Plaster biometryczny Bio-Patch sensor",
-                "result": "Kortyzol 3.8 ng/ml, mleczany 1.4 mmol/l, Na 46 mmol/l, K 4.4 mmol/l, CRP 0.5 mg/l",
+                "category": "Sweat Biochemistry",
+                "parameter": "Sweat biomarkers: Cortisol, lactate, electrolytes, CRP",
+                "equipment": "Bio-Patch Microfluidic Biosensor",
+                "result": "Cortisol 3.8 ng/ml, lactate 1.4 mmol/l, Na 46 mmol/l, K 4.4 mmol/l, CRP 0.5 mg/l",
                 "date": "14.11.2026",
                 "time": "12:50",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-206",
-                "category": "Aktywnosc miesniowa sEMG",
-                "parameter": "Zmeczenie miesni i sEMG Fibre-WBAN",
-                "equipment": "Paski sensorowe Fibre-WBAN",
-                "result": "Stan optymalny brak zmeczenia, MDF 81 Hz, brak mikrodrobnoustrojowych fluktuacji",
+                "category": "sEMG Muscle Activity",
+                "parameter": "Muscle fatigue and sEMG Fibre-WBAN",
+                "equipment": "Fibre-WBAN Sensor Straps",
+                "result": "Optimal state, no fatigue, MDF 81 Hz, no micro-tremor fluctuations",
                 "date": "14.11.2026",
                 "time": "11:10",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-207",
-                "category": "Uklad nerwowy CNS",
-                "parameter": "Indeks gotowosci poznawczej i uwaga EEG",
-                "equipment": "Opaska EEG neuro-sensor",
-                "result": "Indeks gotowosci poznawczej 95 %, skupienie bardzo wysokie, czas reakcji 198 ms",
+                "category": "Central Nervous System CNS",
+                "parameter": "Cognitive readiness index and EEG attention",
+                "equipment": "EEG Neuro-Sensor Headband",
+                "result": "Cognitive readiness index 95 %, very high focus, reaction time 198 ms",
                 "date": "14.11.2026",
                 "time": "09:25",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-208",
-                "category": "Dozymetria radiacyjna",
-                "parameter": "Ekspozycja radiacyjna dobowa i skumulowana",
-                "equipment": "Dozymetr pokladowy RAD-ISS",
-                "result": "Dawka dobowa 0.44 mSv, skumulowana 15.1 mSv, w korytarzu planu misji",
+                "category": "Radiation Dosimetry",
+                "parameter": "Daily and cumulative radiation exposure",
+                "equipment": "Onboard RAD-ISS Dosimeter",
+                "result": "Daily dose 0.44 mSv, cumulative 15.1 mSv, within mission plan corridor",
                 "date": "14.11.2026",
                 "time": "12:00",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             }
         ],
         "telemetryHistory": [
-            {"day": "Dzien 179", "hr": 66, "bpSys": 119, "spo2": 99, "stress": 21, "rad": 14.6},
-            {"day": "Dzien 180", "hr": 64, "bpSys": 117, "spo2": 99, "stress": 19, "rad": 14.7},
-            {"day": "Dzien 181", "hr": 65, "bpSys": 118, "spo2": 99, "stress": 22, "rad": 14.8},
-            {"day": "Dzien 182", "hr": 67, "bpSys": 120, "spo2": 99, "stress": 24, "rad": 14.9},
-            {"day": "Dzien 183", "hr": 63, "bpSys": 116, "spo2": 99, "stress": 18, "rad": 15.0},
-            {"day": "Dzien 184", "hr": 65, "bpSys": 118, "spo2": 99, "stress": 20, "rad": 15.1}
+            {"day": "Day 179", "hr": 66, "bpSys": 119, "spo2": 99, "stress": 21, "rad": 14.6},
+            {"day": "Day 180", "hr": 64, "bpSys": 117, "spo2": 99, "stress": 19, "rad": 14.7},
+            {"day": "Day 181", "hr": 65, "bpSys": 118, "spo2": 99, "stress": 22, "rad": 14.8},
+            {"day": "Day 182", "hr": 67, "bpSys": 120, "spo2": 99, "stress": 24, "rad": 14.9},
+            {"day": "Day 183", "hr": 63, "bpSys": 116, "spo2": 99, "stress": 18, "rad": 15.0},
+            {"day": "Day 184", "hr": 65, "bpSys": 118, "spo2": 99, "stress": 20, "rad": 15.1}
         ],
         "orders": [],
         "dailyChecks": []
@@ -410,24 +410,24 @@ DEMO_ASTRONAUTS = [
         "missionDay": 184,
         "evaHours": 42,
         "overallStatus": "warning",
-        "statusLabel": "Wymagana obserwacja",
-        "statusDescription": "Zanotowano podwyzszone cisnienie tetnicze oraz skrocony czas fazy snu glebokiego po sesji EVA.",
+        "statusLabel": "Observation Required",
+        "statusDescription": "Elevated blood pressure and shortened deep sleep phase recorded after EVA session.",
         "vitals": {
             "hr": 82, "hrUnit": "bpm",
             "rr": 731, "rrUnit": "ms",
             "hrv": 38, "hrvUnit": "ms",
             "bpSys": 136, "bpDia": 86, "bpUnit": "mmHg",
             "spo2": 97, "spo2Unit": "%",
-            "temp": 37.1, "tempUnit": "st. C",
-            "resp": 17, "respUnit": "oddech/min",
-            "stressLevel": 54, "stressUnit": "pkt",
-            "bodyBattery": 52, "bodyBatteryUnit": "pkt",
+            "temp": 37.1, "tempUnit": "deg C",
+            "resp": 17, "respUnit": "breaths/min",
+            "stressLevel": 54, "stressUnit": "pts",
+            "bodyBattery": 52, "bodyBatteryUnit": "pts",
             "radDose": 18.9, "radUnit": "mSv",
-            "boneDensity": 94, "boneUnit": "% normy",
-            "muscleMass": 93, "muscleUnit": "% normy",
+            "boneDensity": 94, "boneUnit": "% norm",
+            "muscleMass": 93, "muscleUnit": "% norm",
             "hydration": 89, "hydrationUnit": "%",
-            "sleepHours": 5.6, "sleepUnit": "godz.",
-            "sleepScore": 64, "sleepScoreUnit": "pkt",
+            "sleepHours": 5.6, "sleepUnit": "h",
+            "sleepScore": 64, "sleepScoreUnit": "pts",
             "cortisol": 8.6, "cortisolUnit": "ng/ml",
             "lactate": 2.9, "lactateUnit": "mmol/l",
             "cognitiveReadiness": 74, "cognitiveUnit": "%"
@@ -435,100 +435,100 @@ DEMO_ASTRONAUTS = [
         "periodicTests": [
             {
                 "id": "pt-301",
-                "category": "Kardiologia i cisnienie",
-                "parameter": "Cisnienie tetnicze krwi i 3-kanalowe EKG",
-                "equipment": "Kamizelka Astroskin Bio-Monitor",
-                "result": "136 na 86 mmHg, rytm zatokowy z tendencja do tachykardii powysilkowej",
+                "category": "Cardiology and Blood Pressure",
+                "parameter": "Arterial blood pressure and 3-lead ECG",
+                "equipment": "Astroskin Bio-Monitor Vest",
+                "result": "136/86 mmHg, sinus rhythm with tendency toward post-exertion tachycardia",
                 "date": "14.11.2026",
                 "time": "13:10",
-                "status": "Wymaga uwagi",
+                "status": "Needs Attention",
                 "statusType": "warning"
             },
             {
                 "id": "pt-302",
-                "category": "Analiza snu",
-                "parameter": "Czas i fazy snu oraz Sleep Score",
-                "equipment": "Opaska biometryczna Actiwatch",
-                "result": "5.6 godz. snu, gleboki 12 %, REM 18 %, 4 wybudzenia, Sleep Score: 64 na 100 pkt",
+                "category": "Sleep Analysis",
+                "parameter": "Sleep duration, sleep stages, and Sleep Score",
+                "equipment": "Actiwatch Biometric Band",
+                "result": "5.6 h total sleep, deep 12 %, REM 18 %, 4 awakenings, Sleep Score: 64/100 pts",
                 "date": "14.11.2026",
                 "time": "06:15",
-                "status": "Wymaga uwagi",
+                "status": "Needs Attention",
                 "statusType": "warning"
             },
             {
                 "id": "pt-303",
-                "category": "Wydolnosc fizyczna",
-                "parameter": "Pulap tlenowy VO2 max i wydatek energii",
-                "equipment": "Garmin pulsometr wydolnosciowy",
-                "result": "44.8 ml/kg/min, wydolnosc zadowalajaca, rezerwy Body Battery obnizone",
+                "category": "Physical Performance",
+                "parameter": "VO2 max aerobic capacity and energy expenditure",
+                "equipment": "Garmin Performance Heart Rate Monitor",
+                "result": "44.8 ml/kg/min, satisfactory capacity, Body Battery reserves reduced",
                 "date": "13.11.2026",
                 "time": "16:30",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-304",
-                "category": "Trening oporowy i aerobowy",
-                "parameter": "Sesja treningowa ARED oraz bieznik T2",
-                "equipment": "Stanowisko treningowe ARED i bieznik T2",
-                "result": "Obciazenie zredukowane 110 kg, bieznik 160 W, czas 90 min, tetno wysilkowe 146 bpm",
+                "category": "Resistance and Aerobic Training",
+                "parameter": "ARED resistance and T2 treadmill session",
+                "equipment": "ARED Station and T2 Treadmill",
+                "result": "Reduced load 110 kg, treadmill 160 W, duration 90 min, exercise HR 146 bpm",
                 "date": "14.11.2026",
                 "time": "10:00",
-                "status": "Wymaga uwagi",
+                "status": "Needs Attention",
                 "statusType": "warning"
             },
             {
                 "id": "pt-305",
-                "category": "Biochemia potu",
-                "parameter": "Biomarkery potu: Kortyzol, mleczany, elektrolity, CRP",
-                "equipment": "Plaster biometryczny Bio-Patch sensor",
-                "result": "Kortyzol 8.6 ng/ml podwyzszony, mleczany 2.9 mmol/l, Na 56 mmol/l, CRP 1.6 mg/l",
+                "category": "Sweat Biochemistry",
+                "parameter": "Sweat biomarkers: Cortisol, lactate, electrolytes, CRP",
+                "equipment": "Bio-Patch Microfluidic Biosensor",
+                "result": "Cortisol 8.6 ng/ml elevated, lactate 2.9 mmol/l, Na 56 mmol/l, CRP 1.6 mg/l",
                 "date": "14.11.2026",
                 "time": "12:40",
-                "status": "Wymaga uwagi",
+                "status": "Needs Attention",
                 "statusType": "warning"
             },
             {
                 "id": "pt-306",
-                "category": "Aktywnosc miesniowa sEMG",
-                "parameter": "Zmeczenie miesni i sEMG Fibre-WBAN",
-                "equipment": "Paski sensorowe Fibre-WBAN",
-                "result": "Stan przejsciowy ostrzezenie o zmeczeniu prostownikow grzbietu, MDF 58 Hz",
+                "category": "sEMG Muscle Activity",
+                "parameter": "Muscle fatigue and sEMG Fibre-WBAN",
+                "equipment": "Fibre-WBAN Sensor Straps",
+                "result": "Transitional state, warning for erector spinae fatigue, MDF 58 Hz",
                 "date": "14.11.2026",
                 "time": "11:45",
-                "status": "Wymaga uwagi",
+                "status": "Needs Attention",
                 "statusType": "warning"
             },
             {
                 "id": "pt-307",
-                "category": "Uklad nerwowy CNS",
-                "parameter": "Indeks gotowosci poznawczej i uwaga EEG",
-                "equipment": "Opaska EEG neuro-sensor",
-                "result": "Indeks gotowosci poznawczej 74 %, skupienie srednie, podwyzszone obciazenie poznawcze",
+                "category": "Central Nervous System CNS",
+                "parameter": "Cognitive readiness index and EEG attention",
+                "equipment": "EEG Neuro-Sensor Headband",
+                "result": "Cognitive readiness index 74 %, moderate focus, elevated cognitive load",
                 "date": "14.11.2026",
                 "time": "09:15",
-                "status": "Wymaga uwagi",
+                "status": "Needs Attention",
                 "statusType": "warning"
             },
             {
                 "id": "pt-308",
-                "category": "Dozymetria radiacyjna",
-                "parameter": "Ekspozycja radiacyjna dobowa i skumulowana",
-                "equipment": "Dozymetr skafandra EVA RAD-EMU",
-                "result": "Dawka dobowa 0.88 mSv wyzsza po wyjsciu EVA, laczna skumulowana 18.9 mSv",
+                "category": "Radiation Dosimetry",
+                "parameter": "Daily and cumulative radiation exposure",
+                "equipment": "EVA Suit RAD-EMU Dosimeter",
+                "result": "Daily dose 0.88 mSv elevated after EVA sortie, cumulative total 18.9 mSv",
                 "date": "14.11.2026",
                 "time": "12:00",
-                "status": "Wymaga uwagi",
+                "status": "Needs Attention",
                 "statusType": "warning"
             }
         ],
         "telemetryHistory": [
-            {"day": "Dzien 179", "hr": 72, "bpSys": 124, "spo2": 98, "stress": 34, "rad": 18.0},
-            {"day": "Dzien 180", "hr": 76, "bpSys": 128, "spo2": 98, "stress": 40, "rad": 18.2},
-            {"day": "Dzien 181", "hr": 80, "bpSys": 132, "spo2": 97, "stress": 48, "rad": 18.4},
-            {"day": "Dzien 182", "hr": 78, "bpSys": 130, "spo2": 97, "stress": 46, "rad": 18.5},
-            {"day": "Dzien 183", "hr": 84, "bpSys": 138, "spo2": 96, "stress": 56, "rad": 18.7},
-            {"day": "Dzien 184", "hr": 82, "bpSys": 136, "spo2": 97, "stress": 54, "rad": 18.9}
+            {"day": "Day 179", "hr": 72, "bpSys": 124, "spo2": 98, "stress": 34, "rad": 18.0},
+            {"day": "Day 180", "hr": 76, "bpSys": 128, "spo2": 98, "stress": 40, "rad": 18.2},
+            {"day": "Day 181", "hr": 80, "bpSys": 132, "spo2": 97, "stress": 48, "rad": 18.4},
+            {"day": "Day 182", "hr": 78, "bpSys": 130, "spo2": 97, "stress": 46, "rad": 18.5},
+            {"day": "Day 183", "hr": 84, "bpSys": 138, "spo2": 96, "stress": 56, "rad": 18.7},
+            {"day": "Day 184", "hr": 82, "bpSys": 136, "spo2": 97, "stress": 54, "rad": 18.9}
         ],
         "orders": [],
         "dailyChecks": []
@@ -543,24 +543,24 @@ DEMO_ASTRONAUTS = [
         "missionDay": 184,
         "evaHours": 14,
         "overallStatus": "critical",
-        "statusLabel": "Podwyzszone ryzyko",
-        "statusDescription": "Tachykardia spoczynkowa, spadek gestosci mineralnej kosci oraz wysoki poziom kortyzolu w pocie.",
+        "statusLabel": "Elevated Risk",
+        "statusDescription": "Resting tachycardia, reduced bone mineral density, and elevated sweat cortisol level.",
         "vitals": {
             "hr": 104, "hrUnit": "bpm",
             "rr": 576, "rrUnit": "ms",
             "hrv": 22, "hrvUnit": "ms",
             "bpSys": 146, "bpDia": 94, "bpUnit": "mmHg",
             "spo2": 95, "spo2Unit": "%",
-            "temp": 37.4, "tempUnit": "st. C",
-            "resp": 20, "respUnit": "oddech/min",
-            "stressLevel": 78, "stressUnit": "pkt",
-            "bodyBattery": 28, "bodyBatteryUnit": "pkt",
+            "temp": 37.4, "tempUnit": "deg C",
+            "resp": 20, "respUnit": "breaths/min",
+            "stressLevel": 78, "stressUnit": "pts",
+            "bodyBattery": 28, "bodyBatteryUnit": "pts",
             "radDose": 24.6, "radUnit": "mSv",
-            "boneDensity": 89, "boneUnit": "% normy",
-            "muscleMass": 88, "muscleUnit": "% normy",
+            "boneDensity": 89, "boneUnit": "% norm",
+            "muscleMass": 88, "muscleUnit": "% norm",
             "hydration": 85, "hydrationUnit": "%",
-            "sleepHours": 4.2, "sleepUnit": "godz.",
-            "sleepScore": 46, "sleepScoreUnit": "pkt",
+            "sleepHours": 4.2, "sleepUnit": "h",
+            "sleepScore": 46, "sleepScoreUnit": "pts",
             "cortisol": 15.2, "cortisolUnit": "ng/ml",
             "lactate": 4.1, "lactateUnit": "mmol/l",
             "cognitiveReadiness": 58, "cognitiveUnit": "%"
@@ -568,100 +568,100 @@ DEMO_ASTRONAUTS = [
         "periodicTests": [
             {
                 "id": "pt-401",
-                "category": "Kardiologia i cisnienie",
-                "parameter": "Cisnienie tetnicze krwi i 3-kanalowe EKG",
-                "equipment": "Kamizelka Astroskin Bio-Monitor",
-                "result": "146 na 94 mmHg, epizody tachykardii zatokowej, skrocony odcinek RR",
+                "category": "Cardiology and Blood Pressure",
+                "parameter": "Arterial blood pressure and 3-lead ECG",
+                "equipment": "Astroskin Bio-Monitor Vest",
+                "result": "146/94 mmHg, sinus tachycardia episodes, shortened RR interval",
                 "date": "14.11.2026",
                 "time": "13:30",
-                "status": "Podwyzszone ryzyko",
+                "status": "Elevated Risk",
                 "statusType": "critical"
             },
             {
                 "id": "pt-402",
-                "category": "Analiza snu",
-                "parameter": "Czas i fazy snu oraz Sleep Score",
-                "equipment": "Opaska biometryczna Actiwatch",
-                "result": "4.2 godz. snu, gleboki 7 %, REM 14 %, 6 wybudzen, Sleep Score: 46 na 100 pkt",
+                "category": "Sleep Analysis",
+                "parameter": "Sleep duration, sleep stages, and Sleep Score",
+                "equipment": "Actiwatch Biometric Band",
+                "result": "4.2 h total sleep, deep 7 %, REM 14 %, 6 awakenings, Sleep Score: 46/100 pts",
                 "date": "14.11.2026",
                 "time": "06:00",
-                "status": "Podwyzszone ryzyko",
+                "status": "Elevated Risk",
                 "statusType": "critical"
             },
             {
                 "id": "pt-403",
-                "category": "Wydolnosc fizyczna",
-                "parameter": "Pulap tlenowy VO2 max i wydatek energii",
-                "equipment": "Garmin pulsometr wydolnosciowy",
-                "result": "36.2 ml/kg/min, wydolnosc niska, Body Battery na wyczerpaniu 28 pkt",
+                "category": "Physical Performance",
+                "parameter": "VO2 max aerobic capacity and energy expenditure",
+                "equipment": "Garmin Performance Heart Rate Monitor",
+                "result": "36.2 ml/kg/min, low capacity, Body Battery depleted at 28 pts",
                 "date": "13.11.2026",
                 "time": "16:00",
-                "status": "Podwyzszone ryzyko",
+                "status": "Elevated Risk",
                 "statusType": "critical"
             },
             {
                 "id": "pt-404",
-                "category": "Trening oporowy i aerobowy",
-                "parameter": "Sesja treningowa ARED oraz bieznik T2",
-                "equipment": "Stanowisko treningowe ARED i bieznik T2",
-                "result": "Trening przerwany po 40 min z powodu zawrotow glowy i tetna 172 bpm",
+                "category": "Resistance and Aerobic Training",
+                "parameter": "ARED resistance and T2 treadmill session",
+                "equipment": "ARED Station and T2 Treadmill",
+                "result": "Session aborted after 40 min due to dizziness and HR 172 bpm",
                 "date": "14.11.2026",
                 "time": "09:40",
-                "status": "Podwyzszone ryzyko",
+                "status": "Elevated Risk",
                 "statusType": "critical"
             },
             {
                 "id": "pt-405",
-                "category": "Biochemia potu",
-                "parameter": "Biomarkery potu: Kortyzol, mleczany, elektrolity, CRP",
-                "equipment": "Plaster biometryczny Bio-Patch sensor",
-                "result": "Kortyzol 15.2 ng/ml stan alarmowy, mleczany 4.1 mmol/l, CRP 2.8 mg/l, utrata Na",
+                "category": "Sweat Biochemistry",
+                "parameter": "Sweat biomarkers: Cortisol, lactate, electrolytes, CRP",
+                "equipment": "Bio-Patch Microfluidic Biosensor",
+                "result": "Cortisol 15.2 ng/ml alert level, lactate 4.1 mmol/l, CRP 2.8 mg/l, Na loss",
                 "date": "14.11.2026",
                 "time": "12:35",
-                "status": "Podwyzszone ryzyko",
+                "status": "Elevated Risk",
                 "statusType": "critical"
             },
             {
                 "id": "pt-406",
-                "category": "Aktywnosc miesniowa sEMG",
-                "parameter": "Zmeczenie miesni i sEMG Fibre-WBAN",
-                "equipment": "Paski sensorowe Fibre-WBAN",
-                "result": "Stan zmeczenia i przeciazenia, mikrodrzenia ZCR podwyzszone, MDF spadek do 44 Hz",
+                "category": "sEMG Muscle Activity",
+                "parameter": "Muscle fatigue and sEMG Fibre-WBAN",
+                "equipment": "Fibre-WBAN Sensor Straps",
+                "result": "Fatigue and overload state, elevated ZCR micro-tremors, MDF dropped to 44 Hz",
                 "date": "14.11.2026",
                 "time": "11:35",
-                "status": "Podwyzszone ryzyko",
+                "status": "Elevated Risk",
                 "statusType": "critical"
             },
             {
                 "id": "pt-407",
-                "category": "Uklad nerwowy CNS",
-                "parameter": "Indeks gotowosci poznawczej i uwaga EEG",
-                "equipment": "Opaska EEG neuro-sensor",
-                "result": "Indeks gotowosci poznawczej 58 %, znaczny spadek uwagi, dominacja fal theta i spowolniony czas reakcji",
+                "category": "Central Nervous System CNS",
+                "parameter": "Cognitive readiness index and EEG attention",
+                "equipment": "EEG Neuro-Sensor Headband",
+                "result": "Cognitive readiness index 58 %, significant attention drop, theta wave dominance and slowed reaction time",
                 "date": "14.11.2026",
                 "time": "09:10",
-                "status": "Podwyzszone ryzyko",
+                "status": "Elevated Risk",
                 "statusType": "critical"
             },
             {
                 "id": "pt-408",
-                "category": "Dozymetria radiacyjna",
-                "parameter": "Ekspozycja radiacyjna dobowa i skumulowana",
-                "equipment": "Dozymetr pokladowy RAD-ISS",
-                "result": "Dawka dobowa 0.62 mSv, laczna skumulowana 24.6 mSv, zblizenie do kwartalnego limitu",
+                "category": "Radiation Dosimetry",
+                "parameter": "Daily and cumulative radiation exposure",
+                "equipment": "Onboard RAD-ISS Dosimeter",
+                "result": "Daily dose 0.62 mSv, cumulative total 24.6 mSv, approaching quarterly limit",
                 "date": "14.11.2026",
                 "time": "12:00",
-                "status": "Podwyzszone ryzyko",
+                "status": "Elevated Risk",
                 "statusType": "critical"
             }
         ],
         "telemetryHistory": [
-            {"day": "Dzien 179", "hr": 88, "bpSys": 136, "spo2": 97, "stress": 62, "rad": 23.8},
-            {"day": "Dzien 180", "hr": 92, "bpSys": 139, "spo2": 96, "stress": 68, "rad": 24.0},
-            {"day": "Dzien 181", "hr": 96, "bpSys": 142, "spo2": 96, "stress": 71, "rad": 24.2},
-            {"day": "Dzien 182", "hr": 98, "bpSys": 141, "spo2": 95, "stress": 74, "rad": 24.3},
-            {"day": "Dzien 183", "hr": 106, "bpSys": 148, "spo2": 95, "stress": 82, "rad": 24.5},
-            {"day": "Dzien 184", "hr": 104, "bpSys": 146, "spo2": 95, "stress": 78, "rad": 24.6}
+            {"day": "Day 179", "hr": 88, "bpSys": 136, "spo2": 97, "stress": 62, "rad": 23.8},
+            {"day": "Day 180", "hr": 92, "bpSys": 139, "spo2": 96, "stress": 68, "rad": 24.0},
+            {"day": "Day 181", "hr": 96, "bpSys": 142, "spo2": 96, "stress": 71, "rad": 24.2},
+            {"day": "Day 182", "hr": 98, "bpSys": 141, "spo2": 95, "stress": 74, "rad": 24.3},
+            {"day": "Day 183", "hr": 106, "bpSys": 148, "spo2": 95, "stress": 82, "rad": 24.5},
+            {"day": "Day 184", "hr": 104, "bpSys": 146, "spo2": 95, "stress": 78, "rad": 24.6}
         ],
         "orders": [],
         "dailyChecks": []
@@ -676,24 +676,24 @@ DEMO_ASTRONAUTS = [
         "missionDay": 184,
         "evaHours": 20,
         "overallStatus": "normal",
-        "statusLabel": "Stan stabilny",
-        "statusDescription": "Wzorowa adaptacja do stanu niewazkosci. Prawidlowy indeks gotowosci poznawczej.",
+        "statusLabel": "Stable Condition",
+        "statusDescription": "Exemplary adaptation to microgravity. Cognitive readiness index within optimal range.",
         "vitals": {
             "hr": 66, "hrUnit": "bpm",
             "rr": 909, "rrUnit": "ms",
             "hrv": 68, "hrvUnit": "ms",
             "bpSys": 118, "bpDia": 78, "bpUnit": "mmHg",
             "spo2": 99, "spo2Unit": "%",
-            "temp": 36.6, "tempUnit": "st. C",
-            "resp": 14, "respUnit": "oddech/min",
-            "stressLevel": 22, "stressUnit": "pkt",
-            "bodyBattery": 84, "bodyBatteryUnit": "pkt",
+            "temp": 36.6, "tempUnit": "deg C",
+            "resp": 14, "respUnit": "breaths/min",
+            "stressLevel": 22, "stressUnit": "pts",
+            "bodyBattery": 84, "bodyBatteryUnit": "pts",
             "radDose": 14.8, "radUnit": "mSv",
-            "boneDensity": 97, "boneUnit": "% normy",
-            "muscleMass": 98, "muscleUnit": "% normy",
+            "boneDensity": 97, "boneUnit": "% norm",
+            "muscleMass": 98, "muscleUnit": "% norm",
             "hydration": 95, "hydrationUnit": "%",
-            "sleepHours": 7.9, "sleepUnit": "godz.",
-            "sleepScore": 89, "sleepScoreUnit": "pkt",
+            "sleepHours": 7.9, "sleepUnit": "h",
+            "sleepScore": 89, "sleepScoreUnit": "pts",
             "cortisol": 4.0, "cortisolUnit": "ng/ml",
             "lactate": 1.6, "lactateUnit": "mmol/l",
             "cognitiveReadiness": 94, "cognitiveUnit": "%"
@@ -701,107 +701,107 @@ DEMO_ASTRONAUTS = [
         "periodicTests": [
             {
                 "id": "pt-501",
-                "category": "Kardiologia i cisnienie",
-                "parameter": "Cisnienie tetnicze krwi i 3-kanalowe EKG",
-                "equipment": "Kamizelka Astroskin Bio-Monitor",
-                "result": "118 na 78 mmHg, rytm miarowy, zalamki P-QRS w normie",
+                "category": "Cardiology and Blood Pressure",
+                "parameter": "Arterial blood pressure and 3-lead ECG",
+                "equipment": "Astroskin Bio-Monitor Vest",
+                "result": "118/78 mmHg, regular rhythm, normal P-QRS complexes",
                 "date": "14.11.2026",
                 "time": "07:10",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-502",
-                "category": "Analiza snu",
-                "parameter": "Czas i fazy snu oraz Sleep Score",
-                "equipment": "Opaska biometryczna Actiwatch",
-                "result": "7.9 godz. snu, gleboki 22 %, REM 24 %, Sleep Score: 89 na 100 pkt",
+                "category": "Sleep Analysis",
+                "parameter": "Sleep duration, sleep stages, and Sleep Score",
+                "equipment": "Actiwatch Biometric Band",
+                "result": "7.9 h total sleep, deep 22 %, REM 24 %, Sleep Score: 89/100 pts",
                 "date": "14.11.2026",
                 "time": "06:20",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-503",
-                "category": "Wydolnosc fizyczna",
-                "parameter": "Pulap tlenowy VO2 max i wydatek energii",
-                "equipment": "Garmin pulsometr wydolnosciowy",
-                "result": "51.8 ml/kg/min, wydolnosc bardzo wysoka, wysoki poziom energii",
+                "category": "Physical Performance",
+                "parameter": "VO2 max aerobic capacity and energy expenditure",
+                "equipment": "Garmin Performance Heart Rate Monitor",
+                "result": "51.8 ml/kg/min, very high fitness, high energy reserve",
                 "date": "13.11.2026",
                 "time": "16:15",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-504",
-                "category": "Trening oporowy i aerobowy",
-                "parameter": "Sesja treningowa ARED oraz bieznik T2",
-                "equipment": "Stanowisko treningowe ARED i bieznik T2",
-                "result": "Trening oporowy 140 kg, bieznik 205 W, czas 120 min, tetno 136 bpm",
+                "category": "Resistance and Aerobic Training",
+                "parameter": "ARED resistance and T2 treadmill session",
+                "equipment": "ARED Station and T2 Treadmill",
+                "result": "Resistance training 140 kg, treadmill 205 W, duration 120 min, HR 136 bpm",
                 "date": "14.11.2026",
                 "time": "11:00",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-505",
-                "category": "Biochemia potu",
-                "parameter": "Biomarkery potu: Kortyzol, mleczany, elektrolity, CRP",
-                "equipment": "Plaster biometryczny Bio-Patch sensor",
-                "result": "Kortyzol 4.0 ng/ml, mleczany 1.6 mmol/l, Na 49 mmol/l, K 4.5 mmol/l, CRP 0.6 mg/l",
+                "category": "Sweat Biochemistry",
+                "parameter": "Sweat biomarkers: Cortisol, lactate, electrolytes, CRP",
+                "equipment": "Bio-Patch Microfluidic Biosensor",
+                "result": "Cortisol 4.0 ng/ml, lactate 1.6 mmol/l, Na 49 mmol/l, K 4.5 mmol/l, CRP 0.6 mg/l",
                 "date": "14.11.2026",
                 "time": "12:48",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-506",
-                "category": "Aktywnosc miesniowa sEMG",
-                "parameter": "Zmeczenie miesni i sEMG Fibre-WBAN",
-                "equipment": "Paski sensorowe Fibre-WBAN",
-                "result": "Stan optymalny brak zmeczenia, MDF 79 Hz, brak objawow tremorowych",
+                "category": "sEMG Muscle Activity",
+                "parameter": "Muscle fatigue and sEMG Fibre-WBAN",
+                "equipment": "Fibre-WBAN Sensor Straps",
+                "result": "Optimal state, no fatigue, MDF 79 Hz, no tremor indicators",
                 "date": "14.11.2026",
                 "time": "11:40",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-507",
-                "category": "Uklad nerwowy CNS",
-                "parameter": "Indeks gotowosci poznawczej i uwaga EEG",
-                "equipment": "Opaska EEG neuro-sensor",
-                "result": "Indeks gotowosci poznawczej 94 %, wysoka podzielnosc uwagi i koncentracja nawigacyjna",
+                "category": "Central Nervous System CNS",
+                "parameter": "Cognitive readiness index and EEG attention",
+                "equipment": "EEG Neuro-Sensor Headband",
+                "result": "Cognitive readiness index 94 %, high divided attention and navigational concentration",
                 "date": "14.11.2026",
                 "time": "09:30",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             },
             {
                 "id": "pt-508",
-                "category": "Dozymetria radiacyjna",
-                "parameter": "Ekspozycja radiacyjna dobowa i skumulowana",
-                "equipment": "Dozymetr pokladowy RAD-ISS",
-                "result": "Dawka dobowa 0.43 mSv, skumulowana dawka calkowita 14.8 mSv",
+                "category": "Radiation Dosimetry",
+                "parameter": "Daily and cumulative radiation exposure",
+                "equipment": "Onboard RAD-ISS Dosimeter",
+                "result": "Daily dose 0.43 mSv, total cumulative dose 14.8 mSv",
                 "date": "14.11.2026",
                 "time": "12:00",
-                "status": "W normie",
+                "status": "Normal",
                 "statusType": "normal"
             }
         ],
         "telemetryHistory": [
-            {"day": "Dzien 179", "hr": 67, "bpSys": 119, "spo2": 99, "stress": 23, "rad": 14.3},
-            {"day": "Dzien 180", "hr": 65, "bpSys": 117, "spo2": 99, "stress": 21, "rad": 14.4},
-            {"day": "Dzien 181", "hr": 68, "bpSys": 120, "spo2": 99, "stress": 24, "rad": 14.5},
-            {"day": "Dzien 182", "hr": 66, "bpSys": 118, "spo2": 99, "stress": 22, "rad": 14.6},
-            {"day": "Dzien 183", "hr": 64, "bpSys": 117, "spo2": 99, "stress": 20, "rad": 14.7},
-            {"day": "Dzien 184", "hr": 66, "bpSys": 118, "spo2": 99, "stress": 22, "rad": 14.8}
+            {"day": "Day 179", "hr": 67, "bpSys": 119, "spo2": 99, "stress": 23, "rad": 14.3},
+            {"day": "Day 180", "hr": 65, "bpSys": 117, "spo2": 99, "stress": 21, "rad": 14.4},
+            {"day": "Day 181", "hr": 68, "bpSys": 120, "spo2": 99, "stress": 24, "rad": 14.5},
+            {"day": "Day 182", "hr": 66, "bpSys": 118, "spo2": 99, "stress": 22, "rad": 14.6},
+            {"day": "Day 183", "hr": 64, "bpSys": 117, "spo2": 99, "stress": 20, "rad": 14.7},
+            {"day": "Day 184", "hr": 66, "bpSys": 118, "spo2": 99, "stress": 22, "rad": 14.8}
         ],
         "orders": [],
         "dailyChecks": []
     }
 ]
 
-# Stan glowny aplikacji
+# Primary application state
 app_state = {
     "mode": "demo",
     "currentUser": None,
@@ -817,71 +817,71 @@ app_state = {
     {
       "id": 'proc-cisnienie',
       "code": 'HMS-PR-BP-01',
-      "name": 'Pomiar cisnienia tetniczego i saturacji SpO2',
-      "category": 'Uklad krazenia i regeneracja',
-      "description": 'Procedura standaryzowanego pomiaru cisnienia krwi oraz wysycenia tlenem w mikrograwitacji',
+      "name": 'Blood Pressure and SpO2 Measurement',
+      "category": 'Cardiovascular and Recovery',
+      "description": 'Standardized arterial blood pressure and oxygen saturation protocol in microgravity',
       "steps": [
-        'Krok 1 z 5: Stabilizacja ciala. Usiadz stabilnie w fotelu diagnostycznym, zapnij pasy biodrowe i odpocznij bez ruchu przez piec minut.',
-        'Krok 2 z 5: Zalozenie mankietu. Umiesc mankiet tensjometru na lewym ramieniu, dokladnie dwa centymetry powyzej zgiecia lokciowego na poziomie serca.',
-        'Krok 3 z 5: Podlaczenie pulsoksymetru. Zaloz czujnik optyczny SpO2 na palec wskazujacy prawej dloni i odczekaj na ustabilizowanie pulsu.',
-        'Krok 4 z 5: Potrojna rejestracja cisnienia. Uruchom automatyczny cykl trzech pomiarow z odstepem dziewiecdziesieciu sekund pomiedzy inflacjami.',
-        'Krok 5 z 5: Weryfikacja i synchronizacja. Sprawdz czy saturacja SpO2 przekracza 96 procent oraz czy cisnienie miesci sie w normie, nastepnie zatwierdz przeslanie do bazy telemetrii.'
+        'Step 1 of 5: Body stabilization. Sit firmly in the diagnostic chair, fasten waist restraints, and rest motionless for five minutes.',
+        'Step 2 of 5: Cuff placement. Position the tensiometer cuff on the left upper arm, exactly two centimeters above the elbow crease at heart level.',
+        'Step 3 of 5: Pulse oximeter connection. Attach the optical SpO2 sensor to the right index finger and wait for the pulse waveform to stabilize.',
+        'Step 4 of 5: Triple blood pressure capture. Start the automated cycle of three measurements spaced ninety seconds apart between inflations.',
+        'Step 5 of 5: Verification and synchronization. Confirm SpO2 exceeds 96 percent and blood pressure is within baseline limits, then commit telemetry upload.'
       ]
     },
     {
       "id": 'proc-ekg',
       "code": 'HMS-PR-EKG-02',
-      "name": 'Rejestracja elektrokardiograficzna EKG oraz zmiennosci HRV',
-      "category": 'Uklad krazenia i regeneracja',
-      "description": 'Zapis holterowski 12-odprowadzeniowy oraz wyznaczenie wskaznikow rezerwy autonomicznej organizmu',
+      "name": 'ECG and HRV Variability Recording',
+      "category": 'Cardiovascular and Recovery',
+      "description": '12-lead Holter recording and calculation of autonomic nervous system reserve indices',
       "steps": [
-        'Krok 1 z 5: Odtluszczenie powierzchni skory. Przetrzyj gazikiem alkoholowym wyznaczone punkty na klatce piersiowej i poczekaj do pelnego wyschniecia.',
-        'Krok 2 z 5: Aplikacja czujnikow. Zaloz kamizelke biometryczna lub naklej wielopunktowy plaster naskorny z elektrodami EKG.',
-        'Krok 3 z 5: Test jakosci styku. Sprawdz w konsoli medycznej poziom impedancji naskorkowej i upewnij sie, ze poziom szumu jest ponizej progu bledu.',
-        'Krok 4 z 5: Spoczynek rejestracyjny. Przyjmij pozycje lezaca na piec minut, oddychajac miarowo w celu wyznaczenia zmiennosci rytmu serca HRV.',
-        'Krok 5 z 5: Zapis i weryfikacja arytmii. Zakoncz sesje zapisu, sprawdz automatyczny raport braku ekstrasystolii i przeslij protokol do centrum.'
+        'Step 1 of 5: Skin preparation. Clean designated chest electrode sites with an alcohol swab and let dry completely.',
+        'Step 2 of 5: Sensor application. Put on the biometric vest or apply the multi-point dermal ECG electrode patch.',
+        'Step 3 of 5: Contact quality test. Check skin impedance in the medical console and verify signal noise stays below the error threshold.',
+        'Step 4 of 5: Baseline resting capture. Recline calmly for five minutes while breathing steadily to compute heart rate variability HRV.',
+        'Step 5 of 5: Recording and arrhythmia check. End session capture, confirm zero extrasystoles in the automated report, and transmit protocol to control.'
       ]
     },
     {
       "id": 'proc-pot',
       "code": 'HMS-PR-SWEAT-03',
-      "name": 'Analiza biochemiczna potu z plastra mikroprzeplywowego',
-      "category": 'Biochemia i stres: analiza potu',
-      "description": 'Oznaczenie stezen jonow sodu, potasu, mleczanow, wapnia oraz bialka CRP',
+      "name": 'Microfluidic Sweat Patch Biochemical Analysis',
+      "category": 'Biochemistry and Stress: Sweat Analysis',
+      "description": 'Quantification of sodium, potassium, lactate, calcium ions, and CRP protein',
       "steps": [
-        'Krok 1 z 5: Przygotowanie sensoryczne. Oczysc wewnetrzna czesc przedramienia i wyjmij hermetycznie zamkniety mikroprzeplywowy biosensor kapilarny.',
-        'Krok 2 z 5: Aplikacja plastra. Umiesc elastyczny plaster na skorze, dociskajac rownomiernie brzegi przez dwadziescia sekund w celu uzyskania szczelnosci.',
-        'Krok 3 z 5: Mikrojontoforeza stymulujaca. Aktywuj 3-minutowa jontoforeze pilokarpinowa o niskim natezeniu pradu w celu pobudzenia ekrynowych gruczolow potowych.',
-        'Krok 4 z 5: Rejestracja biomarkerow. Poczekaj na napelnienie mikroukladu enzymatycznego i odczyt elektrolitow sodu, potasu, mleczanow, wapnia oraz cytokin CRP.',
-        'Krok 5 z 5: Transfer telemetrii. Wykonaj bezprzewodowa synchronizacje NFC z terminalem pokladowym i zdeponuj zuzyty wklad w zasobniku medycznym.'
+        'Step 1 of 5: Sensor preparation. Clean the inner forearm and unseal the hermetically packaged capillary microfluidic biosensor.',
+        'Step 2 of 5: Patch application. Place the flexible patch onto the skin and press the perimeter evenly for twenty seconds to ensure an airtight seal.',
+        'Step 3 of 5: Stimulating micro-iontophoresis. Activate the 3-minute low-current pilocarpine iontophoresis cycle to stimulate eccrine sweat glands.',
+        'Step 4 of 5: Biomarker capture. Wait for the enzymatic micro-channel to fill and log sodium, potassium, lactate, calcium electrolytes, and CRP cytokines.',
+        'Step 5 of 5: Telemetry transfer. Perform wireless NFC sync with the onboard terminal and dispose of the spent cartridge in medical waste.'
       ]
     },
     {
       "id": 'proc-semg',
       "code": 'HMS-PR-SEMG-04',
-      "name": 'Ocena zmeczenia neuromiesniowego SEMG i dynamometria',
-      "category": 'Miesnie i uklad ruchu',
-      "description": 'Pomiar mediany czestotliwosci MDF oraz wspolczynnika przejsc przez zero ZCR na urzadzeniu ARED',
+      "name": 'Neuromuscular sEMG Fatigue and Dynamometry Assessment',
+      "category": 'Musculoskeletal System',
+      "description": 'Median frequency MDF and zero-crossing rate ZCR measurement on the ARED device',
       "steps": [
-        'Krok 1 z 5: Pozycjonowanie elektrod. Naklej elektrody powierzchniowe SEMG wzdluz brzuscca miesnia czworoglowego uda oraz miesnia brzuchatego lydki.',
-        'Krok 2 z 5: Kalibracja zerowa. Przeprowadz 10-sekundowy odczyt spoczynkowy w celu wyznaczenia szumu bazowego i napiecia spoczynkowego.',
-        'Krok 3 z 5: Maksymalny skurcz izometryczny. Wykonaj 5-sekundowe napiecie probne na maszynie ARED do wyznaczenia maksymalnej sily odniesienia.',
-        'Krok 4 z 5: Seria treningowa z monitoringiem. Przeprowadz serie przysiadow z biezacym sledzeniem mediany czestotliwosci sygnalu MDF.',
-        'Krok 5 z 5: Analiza mikrodrzen ZCR. Sprawdz czy wskaznik przejsc przez zero ZCR nie wykazuje skoku swiadczacego o klastrze skrajnego przeciazenia i zapisz wynik.'
+        'Step 1 of 5: Electrode placement. Apply surface sEMG electrodes along the rectus femoris belly and gastrocnemius calf muscle.',
+        'Step 2 of 5: Zero calibration. Record a 10-second resting baseline to determine background noise and resting muscle tone.',
+        'Step 3 of 5: Maximal isometric contraction. Perform a 5-second test contraction on the ARED unit to establish peak reference force.',
+        'Step 4 of 5: Monitored training set. Complete the squat set while tracking real-time median signal frequency MDF.',
+        'Step 5 of 5: ZCR micro-tremor analysis. Verify zero-crossing rate ZCR shows no spike indicating extreme overload clustering and save the result.'
       ]
     },
     {
       "id": 'proc-cns',
       "code": 'HMS-PR-CNS-05',
-      "name": 'Badanie fal mozgowych EEG i skupienia wzroku Eye-tracking',
-      "category": 'Sen i uklad nerwowy CNS',
-      "description": 'Ocena zmeczenia poznawczego, czasu reakcji psychomotorycznej oraz wskaznika Cognitive Readiness',
+      "name": 'EEG Brainwaves and Eye-Tracking Focus Examination',
+      "category": 'Sleep and Central Nervous System',
+      "description": 'Assessment of cognitive fatigue, psychomotor reaction time, and Cognitive Readiness index',
       "steps": [
-        'Krok 1 z 5: Zalozenie opaski EEG. Umiesc opaske z suchymi elektrodami na czole i potylicy, regulujac docisk do uzyskania zielonego wskaznika sygnalu.',
-        'Krok 2 z 5: Kalibracja eyetrackera. Spojrz kolejno na 5 podswietlonych punktow referencyjnych na glownym monitorze konsoli roboczej.',
-        'Krok 3 z 5: Test psychomotoryczny PVT. Wykonaj 3-minutowy standaryzowany test czasu reakcji na losowe bodzce wizualne pojawiajace sie na ekranie.',
-        'Krok 4 z 5: Analiza widma fal theta i beta. System dokona automatycznej kalkulacji indeksu narastajacego zmeczenia poznawczego oraz czasu fiksacji wzroku.',
-        'Krok 5 z 5: Zatwierdzenie indeksu gotowosci. Zweryfikuj koncowy wskaznik Gotowosci Poznawczej Cognitive Readiness i dolacz raport do harmonogramu misji.'
+        'Step 1 of 5: EEG headband placement. Fit the dry-electrode headband over forehead and occiput, adjusting tension until signal indicators turn green.',
+        'Step 2 of 5: Eye-tracker calibration. Gaze sequentially at 5 illuminated reference points on the primary workstation console display.',
+        'Step 3 of 5: Psychomotor vigilance test PVT. Complete the standardized 3-minute reaction-time test responding to random visual stimuli.',
+        'Step 4 of 5: Theta and beta wave spectral analysis. The system automatically computes cumulative cognitive fatigue index and gaze fixation duration.',
+        'Step 5 of 5: Readiness index sign-off. Verify the final Cognitive Readiness score and attach the report to the mission schedule.'
       ]
     }
   ],
@@ -890,49 +890,49 @@ app_state = {
     "upcomingTests": [
       {
         "id": 'up-1',
-        "title": 'Pomiar cisnienia tetniczego i saturacji SpO2',
+        "title": 'Blood Pressure and SpO2 Measurement',
         "astronaut": 'Adam Kolosa',
-        "timeUtc": 'Dzisiaj 17:15 UTC',
+        "timeUtc": 'Today 17:15 UTC',
         "procId": 'proc-cisnienie'
       },
       {
         "id": 'up-2',
-        "title": 'Zapis EKG i zmiennosci rytmu serca HRV',
+        "title": 'ECG and HRV Variability Recording',
         "astronaut": 'Jan Hopperl',
-        "timeUtc": 'Dzisiaj 19:30 UTC',
+        "timeUtc": 'Today 19:30 UTC',
         "procId": 'proc-ekg'
       },
       {
         "id": 'up-3',
-        "title": 'Badanie fal mozgowych EEG i skupienia Eye-tracking',
+        "title": 'EEG Brainwaves and Eye-Tracking Focus Test',
         "astronaut": 'Wojciech Skrzypczak',
-        "timeUtc": 'Jutro 07:00 UTC',
+        "timeUtc": 'Tomorrow 07:00 UTC',
         "procId": 'proc-cns'
       },
       {
         "id": 'up-4',
-        "title": 'Biochemiczna analiza potu: wapn i bialko CRP',
+        "title": 'Biochemical Sweat Analysis: Calcium and CRP',
         "astronaut": 'Krzysztof Mysior',
-        "timeUtc": 'Jutro 11:00 UTC',
+        "timeUtc": 'Tomorrow 11:00 UTC',
         "procId": 'proc-pot'
       }
     ],
     "overdueFifoQueue": [
       {
         "id": 'fifo-1',
-        "title": 'Biochemiczna analiza potu: elektrolity i kortyzol',
+        "title": 'Biochemical Sweat Analysis: Electrolytes and Cortisol',
         "astronaut": 'Krzysztof Mysior',
-        "dueTime": 'Wczoraj 20:30 UTC',
-        "delay": '20 godz. temu',
+        "dueTime": 'Yesterday 20:30 UTC',
+        "delay": '20 h ago',
         "orderIndex": 1,
         "procId": 'proc-pot'
       },
       {
         "id": 'fifo-2',
-        "title": 'Ocena neuromiesniowa SEMG na maszynie ARED',
+        "title": 'Neuromuscular sEMG Assessment on ARED',
         "astronaut": 'Michał Pawlak',
-        "dueTime": 'Dzisiaj 08:00 UTC',
-        "delay": '8 godz. temu',
+        "dueTime": 'Today 08:00 UTC',
+        "delay": '8 h ago',
         "orderIndex": 2,
         "procId": 'proc-semg'
       }
@@ -940,241 +940,241 @@ app_state = {
   },
   "prophylaxisGuidelines": [
     {
-      "category": 'Uklad krazenia i regeneracja',
-      "symptom": 'Za wysokie tetno HR w spoczynku lub nagly wzrost w ciagu dnia',
-      "guideline": 'Odpoczynek, przerwanie aktualnego wysilku, nawodnienie organizmu, sesja oddechowa redukujaca stres.'
+      "category": 'Cardiovascular and Recovery',
+      "symptom": 'Elevated resting heart rate HR or sudden daytime spike',
+      "guideline": 'Rest, cease current exertion, rehydrate, and complete a stress-reducing breathing session.'
     },
     {
-      "category": 'Uklad krazenia i regeneracja',
-      "symptom": 'Poranny wzrost tetna spoczynkowego polaczony ze spadkiem zmiennosci rytmu serca HRV',
-      "guideline": 'Oznaka niepelnej regeneracji nocnej. Automatyczne obnizenie trudnosci zaplanowanych zadan w harmonogramie i zamiana ciezkich aktywnosci na lzejsze.'
+      "category": 'Cardiovascular and Recovery',
+      "symptom": 'Morning rise in resting heart rate combined with decreased HRV variability',
+      "guideline": 'Sign of incomplete overnight recovery. Automatically lower scheduled task intensity and swap heavy duties for lighter work.'
     },
     {
-      "category": 'Uklad krazenia i regeneracja',
-      "symptom": 'Dlugotrwaly trend spadkowy HRV w ujeciu wielodniowym',
-      "guideline": 'Sygnal kumulujacego sie przemeczenia lub przetrenowania. Wprowadzenie dnia regeneracyjnego, wydluzenie czasu snu i ograniczenie intensywnych treningow.'
+      "category": 'Cardiovascular and Recovery',
+      "symptom": 'Multi-day downward HRV trend',
+      "guideline": 'Indicator of cumulative fatigue or overtraining. Schedule a recovery day, extend sleep duration, and restrict high-intensity exercise.'
     },
     {
-      "category": 'Uklad krazenia i regeneracja',
-      "symptom": 'Nagly spadek cisnienia krwi BP w trakcie aktywnosci lub spaceru kosmicznego EVA',
-      "guideline": 'Natychmiastowe wstrzymanie pracy fizycznej, uzupelnienie plynow i elektrolitow, kontrola objawow ortostatycznych oraz powiadomienie lekarza misji.'
+      "category": 'Cardiovascular and Recovery',
+      "symptom": 'Sudden arterial blood pressure drop during activity or EVA spacewalk',
+      "guideline": 'Immediately halt physical work, replenish fluids and electrolytes, monitor orthostatic symptoms, and notify the flight surgeon.'
     },
     {
-      "category": 'Uklad krazenia i regeneracja',
-      "symptom": 'Stopniowy wzrost cisnienia krwi BP w czasie',
-      "guideline": 'Redukcja obciazenia psychofizycznego, techniki relaksacyjne, kontrola bilansu wodno-elektrolitowego, szczegolnie sodu.'
+      "category": 'Cardiovascular and Recovery',
+      "symptom": 'Gradual arterial blood pressure increase over time',
+      "guideline": 'Reduce psychophysical workload, apply relaxation techniques, and review fluid-electrolyte balance especially sodium intake.'
     },
     {
-      "category": 'Uklad krazenia i regeneracja',
-      "symptom": 'Wykryte zaburzenia rytmu serca arytmia podczas wysilku lub spoczynku',
-      "guideline": 'Natychmiastowe przerwanie zadania, odpoczynek, odczyt pelnego zapisu EKG z kamizelki biometrycznej lub plastra naskornego i pilna konsultacja medyczna.'
+      "category": 'Cardiovascular and Recovery',
+      "symptom": 'Cardiac rhythm disturbances arrhythmia detected during exercise or rest',
+      "guideline": 'Stop task immediately, rest, retrieve full ECG waveform from biometric vest or dermal patch, and request urgent medical consult.'
     },
     {
-      "category": 'Uklad krazenia i regeneracja',
-      "symptom": 'Spadek saturacji krwi SpO2 ponizej normy lub trend spadkowy w trakcie wysilku',
-      "guideline": 'Przerwanie aktywnosci, kontrola wentylacji i stezenia tlenu O2 w skafandrze lub kabinie, spokojne glebokie oddychanie.'
+      "category": 'Cardiovascular and Recovery',
+      "symptom": 'Blood oxygen saturation SpO2 drop below baseline or downward trend during exertion',
+      "guideline": 'Halt activity, check ventilation and O2 concentration in suit or cabin, and practice calm deep breathing.'
     },
     {
-      "category": 'Uklad krazenia i regeneracja',
-      "symptom": 'Stopniowy lub nagly wzrost temperatury ciala',
-      "guideline": 'Wczesny sygnal przegrzania lub rozwijajacej sie infekcji. Schlodzenie organizmu, korekta temperatury kabiny lub skafandra, nawodnienie, odpoczynek i krzyzowa weryfikacja poziomu bialka CRP w pocie.'
+      "category": 'Cardiovascular and Recovery',
+      "symptom": 'Gradual or sudden rise in body temperature',
+      "guideline": 'Early sign of overheating or developing infection. Cool the body, adjust cabin or spacesuit temperature, hydrate, rest, and cross-verify sweat CRP protein levels.'
     },
     {
-      "category": 'Sen i uklad nerwowy CNS',
-      "symptom": 'Niedobor snu glebokiego lub fazy REM w ujeciu nocnym',
-      "guideline": 'Przelozenie zadan wymagajacych wysokiej precyzji, na przyklad napraw lub eksperymentow, na inny termin oraz zaplanowanie w ciagu dnia krotkiej drzemki regeneracyjnej power nap.'
+      "category": 'Sleep and Central Nervous System',
+      "symptom": 'Overnight deficit in deep sleep or REM sleep stages',
+      "guideline": 'Defer high-precision tasks such as delicate repairs or experiments and schedule a short daytime restorative power nap.'
     },
     {
-      "category": 'Sen i uklad nerwowy CNS',
-      "symptom": 'Wielodniowy deficyt calkowitego czasu i jakosci snu: aktygrafia i EEG',
-      "guideline": 'Obnizenie wskaznika Gotowosci Poznawczej Cognitive Readiness, delegowanie wylacznie zadan rutynowych, korekta warunkow srodowiskowych kabiny przed kolejnym snem: obnizenie temperatury i poziomu CO2.'
+      "category": 'Sleep and Central Nervous System',
+      "symptom": 'Multi-day deficit in total sleep time and quality: actigraphy and EEG',
+      "guideline": 'Lower Cognitive Readiness operational score, assign routine tasks only, and tune pre-sleep cabin environment by reducing temperature and CO2 levels.'
     },
     {
-      "category": 'Sen i uklad nerwowy CNS',
-      "symptom": 'Zmiana wzorca fal mozgowych EEG wskazujaca na narastajace zmeczenie poznawcze w trakcie pracy',
-      "guideline": 'Wprowadzenie krotkiej, 10-minutowej przerwy regeneracyjnej, zmiana rodzaju aktywnosci na mniej obciazajaca umyslowo.'
+      "category": 'Sleep and Central Nervous System',
+      "symptom": 'EEG brainwave pattern shift indicating mounting cognitive fatigue on duty',
+      "guideline": 'Introduce a brief 10-minute recovery break and rotate to lower cognitive-load tasks.'
     },
     {
-      "category": 'Sen i uklad nerwowy CNS',
-      "symptom": 'Spadek poziomu skupienia rejestrowany przez ruch galek ocznych: eye-tracking, wydluzony czas fiksacji, wolniejsze reakcje',
-      "guideline": 'Alert haptyczny przypominajacy o przerwie, odsuniecie od procedur krytycznych, na przyklad sterowania lub obslugi skomplikowanej aparatury, do czasu powrotu pelnej uwagi.'
+      "category": 'Sleep and Central Nervous System',
+      "symptom": 'Focus drop captured via eye-tracking: prolonged fixation time and slower responses',
+      "guideline": 'Trigger haptic break alert and step back from critical flight or equipment controls until full attention returns.'
     },
     {
-      "category": 'Sen i uklad nerwowy CNS',
-      "symptom": 'Jednoczesny spadek koncentracji EEG i eye-tracking oraz wzrost stezenia CO2 w otoczeniu',
-      "guideline": 'Natychmiastowa wentylacja pomieszczenia lub modulu, opuszczenie strefy o slabej cyrkulacji powietrza i chwila odpoczynku.'
+      "category": 'Sleep and Central Nervous System',
+      "symptom": 'Concurrent drop in EEG and eye-tracking focus alongside rising ambient CO2',
+      "guideline": 'Immediately ventilate compartment or module, exit poor-airflow zone, and take a recovery rest period.'
     },
     {
-      "category": 'Miesnie i uklad ruchu',
-      "symptom": 'Spadek mediany czestotliwosci sygnalu miesniowego MDF w SEMG w trakcie serii cwiczen lub pracy fizycznej',
-      "guideline": 'Wczesny sygnal zmeczenia miesni, stan przejsciowy. Dynamiczne zmniejszenie obciazenia treningowego, na przyklad na maszynach ARED lub T2, lub skrocenie podzadania.'
+      "category": 'Musculoskeletal System',
+      "symptom": 'Decline in sEMG median frequency MDF during exercise sets or physical work',
+      "guideline": 'Early muscle fatigue signal, transitional state. Dynamically reduce training load on ARED or T2 or shorten task block.'
     },
     {
-      "category": 'Miesnie i uklad ruchu',
-      "symptom": 'Wzrost wspolczynnika przejsc przez zero ZCR w SEMG oznaczajacy mikrodrzenia miesni',
-      "guideline": 'Oznaka krytycznego wyczerpania i ryzyka kontuzji: Klaster 3 Zmeczenie i Przeciazenie. Natychmiastowe przerwanie wysilku, rozciaganie i wydluzony odpoczynek.'
+      "category": 'Musculoskeletal System',
+      "symptom": 'Increase in sEMG zero-crossing rate ZCR indicating muscle micro-tremors',
+      "guideline": 'Sign of critical exhaustion and injury risk: Cluster 3 Fatigue and Overload. Immediately cease exertion, stretch, and take extended rest.'
     },
     {
-      "category": 'Miesnie i uklad ruchu',
-      "symptom": 'Spadek mocy i momentu sily w stawach: IMU, goniometr, odziez Fibre-WBAN w porownaniu do wartosci bazowych z poprzednich dni',
-      "guideline": 'Modyfikacja planu treningowego, wlaczenie elektrostymulacji miesniowej EMS w celu wsparcia regeneracji i zapobiegania atrofii.'
+      "category": 'Musculoskeletal System',
+      "symptom": 'Drop in joint power and torque measured via IMU, goniometer, and Fibre-WBAN garment vs previous days',
+      "guideline": 'Modify exercise prescription and enable EMS neuromuscular stimulation to aid recovery and prevent atrophy.'
     },
     {
-      "category": 'Miesnie i uklad ruchu',
-      "symptom": 'Dlugotrwale ograniczenie zakresu ruchu i aktywnosci okolic talii oraz bioder: czujniki IMU i dotykowe',
-      "guideline": 'Wprowadzenie dedykowanych cwiczen rozciagajacych i mobilizujacych odcinek ledzwiowo-biodrowy w celu przeciwdzialania sztywnosci i zanikom miesniowym w mikrograwitacji.'
+      "category": 'Musculoskeletal System',
+      "symptom": 'Prolonged restriction in lumbar-hip range of motion and activity: IMU and tactile sensors',
+      "guideline": 'Add targeted lumbar-hip stretching and mobility routines to counteract stiffness and muscle atrophy in microgravity.'
     },
     {
-      "category": 'Miesnie i uklad ruchu',
-      "symptom": 'Asymetria pracy miesni lub nieprawidlowe katy zgiecia stawow podczas podnoszenia ciezarow lub pracy w skafandrze',
-      "guideline": 'Korekta techniki ruchu w czasie rzeczywistym, zmniejszenie obciazenia w celu unikniecia przeciazenia stawow.'
+      "category": 'Musculoskeletal System',
+      "symptom": 'Muscle recruitment asymmetry or improper joint flexion angles during lifting or suit work',
+      "guideline": 'Correct movement form in real time and lower resistance load to prevent joint overload.'
     },
     {
-      "category": 'Biochemia i stres: analiza potu',
-      "symptom": 'Wysoki poziom kortyzolu rano: zaburzenie rytmu dobowego',
-      "guideline": 'Redukcja obciazenia zadaniami na dany dzien, wlaczenie sesji oddechowej lub treningu relaksacyjnego.'
+      "category": 'Biochemistry and Stress: Sweat Analysis',
+      "symptom": 'Elevated morning cortisol level: circadian rhythm disruption',
+      "guideline": 'Trim daily workload schedule and perform guided breathing or relaxation exercises.'
     },
     {
-      "category": 'Biochemia i stres: analiza potu',
-      "symptom": 'Nagly skok kortyzolu w ciagu dnia: ostra reakcja stresowa',
-      "guideline": 'Krotka przerwa od biezacych obowiazkow, techniki wyciszajace, weryfikacja tetna i cisnienia krwi.'
+      "category": 'Biochemistry and Stress: Sweat Analysis',
+      "symptom": 'Sudden daytime cortisol spike: acute stress response',
+      "guideline": 'Take a short break from current duties, practice calming techniques, and re-verify heart rate and blood pressure.'
     },
     {
-      "category": 'Biochemia i stres: analiza potu',
-      "symptom": 'Szybki wzrost stezenia mleczanow w pocie podczas wysilku',
-      "guideline": 'Sygnal przekroczenia progu beztlenowego i narastajacego zakwaszenia miesni. Zmniejszenie tempa pracy lub treningu, 10-minutowa przerwa na odpoczynek i nawodnienie.'
+      "category": 'Biochemistry and Stress: Sweat Analysis',
+      "symptom": 'Rapid increase in sweat lactate concentration during exertion',
+      "guideline": 'Signal of anaerobic threshold breach and lactic buildup. Slow work or exercise pace and take a 10-minute rest and hydration break.'
     },
     {
-      "category": 'Biochemia i stres: analiza potu',
-      "symptom": 'Wzrost stezenia jonow sodu Na plus i potasu K plus w pocie',
-      "guideline": 'Oznaka postepujacego odwodnienia organizmu. Natychmiastowy alert o koniecznosci uzupelnienia plynow oraz elektrolitow.'
+      "category": 'Biochemistry and Stress: Sweat Analysis',
+      "symptom": 'Rising sodium Na plus and potassium K plus concentrations in sweat',
+      "guideline": 'Sign of progressive dehydration. Immediate alert to replenish fluids and electrolytes.'
     },
     {
-      "category": 'Biochemia i stres: analiza potu',
-      "symptom": 'Dlugotrwaly wzrost wydalania jonow wapnia Ca 2 plus w pocie w ujeciu tygodniowym lub miesiecznym',
-      "guideline": 'Sygnal przyspieszonej utraty masy kostnej: osteopenii kosmicznej. Weryfikacja suplementacji: witamina D, wapn, oraz korekta obciazen oporowych podczas treningow silowych.'
+      "category": 'Biochemistry and Stress: Sweat Analysis',
+      "symptom": 'Persistent weekly or monthly rise in sweat calcium Ca 2 plus excretion',
+      "guideline": 'Indicator of accelerated bone demineralization: space osteopenia. Review vitamin D and calcium supplementation and adjust resistance loads.'
     },
     {
-      "category": 'Biochemia i stres: analiza potu',
-      "symptom": 'Wzrost poziomu bialka CRP oraz cytokin prozapalnych w pocie',
-      "guideline": 'Wczesne wykrycie stanu zapalnego, mikrourazow miesniowych lub rozwijajacej sie infekcji, czesto jeszcze przed wystapieniem goraczki. Bezwzgledny odpoczynek, odwolanie wysilku fizycznego i wdrozenie procedur medycznych.'
+      "category": 'Biochemistry and Stress: Sweat Analysis',
+      "symptom": 'Elevated CRP protein and pro-inflammatory cytokines in sweat',
+      "guideline": 'Early detection of inflammation, muscle micro-trauma, or nascent infection prior to fever onset. Mandatory rest, cancel exercise, and start clinical monitoring.'
     },
     {
-      "category": 'Srodowisko kabiny i skafandra',
-      "symptom": 'Narastajace stezenie dwutlenku wegla CO2 w module lub skafandrze',
-      "guideline": 'Zapobieganie bolom glowy, sennosci i spadkowi koncentracji poprzez automatyczne zwiekszenie wydajnosci systemow podtrzymywania zycia ECLSS lub wymiane pochlaniaczy.'
+      "category": 'Cabin and Suit Environment',
+      "symptom": 'Rising carbon dioxide CO2 concentration in module or spacesuit',
+      "guideline": 'Prevent headaches, drowsiness, and focus drops by automatically boosting ECLSS scrubbing throughput or replacing CO2 cartridges.'
     },
     {
-      "category": 'Srodowisko kabiny i skafandra',
-      "symptom": 'Wzrost temperatury i wilgotnosci otoczenia podczas pracy fizycznej lub snu',
-      "guideline": 'Automatyczne schlodzenie kabiny przed snem, dla poprawy jakosci faz NREM i REM, oraz regulacja chlodzenia cieczowego w skafandrze EVA w celu unikniecia odwodnienia i przegrzania.'
+      "category": 'Cabin and Suit Environment',
+      "symptom": 'Elevated ambient temperature and humidity during physical work or sleep',
+      "guideline": 'Pre-cool crew cabin before sleep to enhance NREM and REM architecture, and regulate EVA liquid cooling loop to avoid dehydration and overheating.'
     },
     {
-      "category": 'Srodowisko kabiny i skafandra',
-      "symptom": 'Podwyzszony poziom tlenku azotu NO wykryty przez czujniki w odziezy',
-      "guideline": 'Sygnal podraznienia lub stanu zapalnego drog oddechowych. Kontrola czystosci powietrza pod katem pylow i aerozoli, nawilzenie sluzowek i odpoczynek.'
+      "category": 'Cabin and Suit Environment',
+      "symptom": 'Elevated nitric oxide NO detected by garment sensors',
+      "guideline": 'Indicator of airway irritation or inflammation. Inspect cabin air for particulates and aerosols, hydrate mucous membranes, and rest.'
     },
     {
-      "category": 'Srodowisko kabiny i skafandra',
-      "symptom": 'Wzrost skumulowanej dawki promieniowania jonizujacego w czasie: dozymetry',
-      "guideline": 'Skrocenie czasu przebywania w slabiej oslonietych modulach lub przerwanie spaceru kosmicznego EVA, przejscie do strefy o zwiekszonej oslonie radiacyjnej oraz monitorowanie markerow stresu oksydacyjnego i stanu zapalnego CRP.'
+      "category": 'Cabin and Suit Environment',
+      "symptom": 'Rising cumulative ionizing radiation dose recorded by dosimeters',
+      "guideline": 'Minimize stay in lightly shielded modules or abort EVA sortie, shelter in high-shielding volume, and monitor oxidative stress and CRP markers.'
     }
   ],
   "criticalScenarios": [
     {
-      "category": 'Uklad krazenia i zagrozenie zycia',
-      "title": 'Powazna lub utrzymujaca sie arytmia wykryta w zapisie EKG lub PPG podczas EVA lub spoczynku',
-      "action": 'Natychmiastowe przerwanie spaceru kosmicznego EVA przez drugiego czlonka zalogi i odprowadzenie astronauty do sluzy. Konieczna pilna telekonsultacja z lekarzem misji oraz rozwazenie powrotu na Ziemie przy braku stabilizacji rytmu serca.'
+      "category": 'Cardiovascular and Life Threat',
+      "title": 'Severe or sustained arrhythmia detected on ECG or PPG during EVA or rest',
+      "action": 'Immediate EVA termination by crewmate and escort back to airlock. Urgent flight surgeon teleconsultation and Earth return evaluation if rhythm fails to stabilize.'
     },
     {
-      "category": 'Uklad krazenia i zagrozenie zycia',
-      "title": 'Gwaltowny, gleboki spadek cisnienia krwi BP polaczony z przyspieszeniem tetna HR i zawrotami glowy',
-      "action": 'Ryzyko omdlenia, szczegolnie przez przesuniecie plynow ku glowie i spadek masy miesnia sercowego w mikrograwitacji. Wymagana bezposrednia asekuracja przez innego czlonka zalogi, podanie plynow i lekow pod nadzorem lekarza misji.'
+      "category": 'Cardiovascular and Life Threat',
+      "title": 'Rapid severe drop in blood pressure BP paired with elevated HR and dizziness',
+      "action": 'Syncope risk amplified by cephalad fluid shift and cardiac deconditioning in microgravity. Requires immediate crewmate stabilization, IV/oral fluids, and flight surgeon intervention.'
     },
     {
-      "category": 'Uklad krazenia i zagrozenie zycia',
-      "title": 'Krytyczny spadek saturacji krwi SpO2 niereagujacy na korekte tlenu w skafandrze lub kabinie',
-      "action": 'Podejrzenie obrzeku pluc, zatorowosci lub awarii ukladu oddechowego. Natychmiastowa pomoc zalogi: podanie czystego tlenu, resuscytacja w razie utraty przytomnosci, alarm dla lekarza misji i przygotowanie do ewakuacji na Ziemie.'
+      "category": 'Cardiovascular and Life Threat',
+      "title": 'Critical SpO2 desaturation unresponsive to oxygen adjustment in suit or cabin',
+      "action": 'Suspected pulmonary edema, embolism, or respiratory system failure. Immediate crew assistance: 100 percent oxygen delivery, CPR readiness, flight surgeon alert, and evacuation staging.'
     },
     {
-      "category": 'Uklad krazenia i zagrozenie zycia',
-      "title": 'Wysoka goraczka, gwaltowny wzrost temperatury ciala, polaczona z zaburzeniami pracy serca',
-      "action": 'Sygnal ciezkiej infekcji ogolnoustrojowej lub sepsy. Konieczna izolacja w module medycznym pod opieka zalogi, wdrozenie farmakoterapii zleconej przez lekarza misji oraz ocena zasadnosci ewakuacji.'
+      "category": 'Cardiovascular and Life Threat',
+      "title": 'High fever with abrupt body temperature surge combined with cardiac instability',
+      "action": 'Indicator of severe systemic infection or sepsis. Isolate in medical bay under crew care, start flight surgeon pharmacotherapy, and evaluate medical evacuation.'
     },
     {
-      "category": 'Uklad nerwowy CNS i funkcje poznawcze',
-      "title": 'Gwaltowna utrata uwagi: eye-tracking, i patologiczny zapis fal mozgowych EEG w trakcie zadan krytycznych',
-      "action": 'Ryzyko utraty swiadomosci lub popelnienia katastrofalnego bledu podczas dokowania, napraw czy EVA. Natychmiastowe przejecie obowiazkow i zabezpieczenie astronauty przez innego czlonka zalogi.'
+      "category": 'Central Nervous System and Cognitive Function',
+      "title": 'Sudden loss of attention on eye-tracking and pathological EEG during critical operations',
+      "action": 'Risk of loss of consciousness or critical error during docking, repair, or EVA. Immediate duty handover and crewmate securing of the astronaut.'
     },
     {
-      "category": 'Uklad nerwowy CNS i funkcje poznawcze',
-      "title": 'Skrajne, wielodniowe zaburzenia snu i rytmu dobowego prowadzace do halucynacji lub glebokiej dezorientacji',
-      "action": 'Zalamanie Gotowosci Poznawczej Cognitive Readiness na skutek stresu, izolacji i przeciazenia. Wymagana interwencja psychologa lub lekarza misji, staly nadzor zalogi i ewentualne skrocenie misji: powrot na Ziemie.'
+      "category": 'Central Nervous System and Cognitive Function',
+      "title": 'Severe multi-day sleep and circadian disruption causing hallucinations or deep disorientation',
+      "action": 'Cognitive Readiness collapse driven by stress, isolation, and overload. Requires mission psychologist or flight surgeon intervention, continuous crew watch, and possible early return to Earth.'
     },
     {
-      "category": 'Uklad nerwowy CNS i funkcje poznawcze',
-      "title": 'Nagle zaburzenia koordynacji ruchowej: dane z IMU lub goniometru, polaczone z zaburzeniami pracy mozgu EEG',
-      "action": 'Podejrzenie udaru lub ostrego uszkodzenia neurologicznego, na przyklad w wyniku promieniowania kosmicznego. Natychmiastowa opieka zalogi, alarm dla lekarza misji i pilna ewakuacja na Ziemie.'
+      "category": 'Central Nervous System and Cognitive Function',
+      "title": 'Acute motor coordination deficit via IMU or goniometer combined with EEG abnormalities',
+      "action": 'Suspected stroke or acute neurological event such as cosmic radiation insult. Immediate crew care, flight surgeon emergency alert, and urgent evacuation to Earth.'
     },
     {
-      "category": 'Miesnie, uklad ruchu i urazy mechaniczne',
-      "title": 'Gwaltowne, niekontrolowane mikrodrzenia miesni: skok ZCR w SEMG, i nagly zanik sily lub momentu obrotowego IMU podczas EVA',
-      "action": 'Calkowite wyczerpanie miesniowe grozace utrata chwytu i dryfowaniem w przestrzeni lub kontuzja. Konieczna natychmiastowa pomoc partnera EVA w powrocie do stacji i zabezpieczeniu sprzetu.'
+      "category": 'Muscles, Musculoskeletal System and Trauma',
+      "title": 'Abrupt uncontrolled muscle micro-tremors ZCR spike in sEMG and sudden IMU force or torque drop during EVA',
+      "action": 'Total muscular exhaustion risking grip loss, untethered drift, or injury. Immediate EVA buddy rescue to return to station and secure hardware.'
     },
     {
-      "category": 'Miesnie, uklad ruchu i urazy mechaniczne',
-      "title": 'Ostra asymetria katow zgiecia stawow i gwaltowny spadek mocy miesniowej polaczony z bolem',
-      "action": 'Podejrzenie zerwania miesnia, wiezadla lub zlamania: wysokie ryzyko ze wzgledu na utrate 1 do 2 procent masy kostnej miesiecznie. Pomoc zalogi w unieruchomieniu, konsultacja z chirurgiem lub ortopeda na Ziemi i powrot na Ziemie w przypadku zlaman wymagajacych operacji.'
+      "category": 'Muscles, Musculoskeletal System and Trauma',
+      "title": 'Acute joint flexion asymmetry and sudden muscle power loss accompanied by pain',
+      "action": 'Suspected muscle tear, ligament rupture, or fracture given 1 to 2 percent monthly bone loss risk. Crew immobilization, ground orthopedic surgical consult, and Earth return if surgery is indicated.'
     },
     {
-      "category": 'Miesnie, uklad ruchu i urazy mechaniczne',
-      "title": 'Utrata stabilnosci i mobilnosci odcinka ledzwiowo-biodrowego: czujniki IMU i dotykowe na biodrach',
-      "action": 'Ostre wypadniecie dysku lub silny zespol bolowy kregoslupa wywolany brakiem rozciagania w mikrograwitacji. Wymagana pomoc zalogi w transporcie i opiece oraz konsultacja ze specjalista.'
+      "category": 'Muscles, Musculoskeletal System and Trauma',
+      "title": 'Loss of lumbar-hip stability and mobility tracked by IMU and hip tactile sensors',
+      "action": 'Acute disc herniation or severe spinal pain syndrome caused by microgravity spinal unloading. Requires crew transport assistance, bedside care, and specialist consult.'
     },
     {
-      "category": 'Biochemia, metabolizm i ostre stany zapalne: analiza potu',
-      "title": 'Gwaltowny, skokowy wzrost bialka CRP i cytokin prozapalnych w pocie: plaster mikroprzeplywowy',
-      "action": 'Ostry stan zapalny, ciezka infekcja, na przyklad zapalenie pluc, wyrostka robaczkowego, lub masywny rozpad miesni: rabdomioliza. Wymaga natychmiastowej interwencji lekarza misji, diagnostyki pokladowej prowadzonej przez zaloge i potencjalnej ewakuacji na Ziemie.'
+      "category": 'Biochemistry, Metabolism and Acute Inflammation: Sweat Analysis',
+      "title": 'Abrupt spike in sweat CRP protein and pro-inflammatory cytokines via microfluidic patch',
+      "action": 'Acute inflammation, severe infection such as pneumonia or appendicitis, or massive muscle breakdown: rhabdomyolysis. Demands immediate flight surgeon intervention, onboard diagnostics, and evacuation evaluation.'
     },
     {
-      "category": 'Biochemia, metabolizm i ostre stany zapalne: analiza potu',
-      "title": 'Krytyczne zaburzenia elektrolitowe: skrajne wahania Na plus i K plus w pocie, polaczone z arytmia HR i HRV',
-      "action": 'Ciezkie odwodnienie lub zaburzenia gospodarki potasowej grozace zatrzymaniem krazenia. Konieczne podanie kroplowki: nawodnienie dozylne, przez przeszkolonego czlonka zalogi pod nadzorem lekarza misji.'
+      "category": 'Biochemistry, Metabolism and Acute Inflammation: Sweat Analysis',
+      "title": 'Critical electrolyte derangement: extreme sweat Na plus and K plus swings with HR/HRV arrhythmia',
+      "action": 'Severe dehydration or potassium imbalance risking cardiac arrest. Intravenous fluid resuscitation required by trained crewmate under flight surgeon direction.'
     },
     {
-      "category": 'Biochemia, metabolizm i ostre stany zapalne: analiza potu',
-      "title": 'Ekstremalnie wysokie stezenie mleczanow utrzymujace sie mimo zaprzestania wysilku',
-      "action": 'Sygnal kwasicy mleczanowej lub niedotlenienia tkanek. Wymaga pilnej oceny medycznej przez specjaliste z Ziemi i tlenoterapii pod nadzorem zalogi.'
+      "category": 'Biochemistry, Metabolism and Acute Inflammation: Sweat Analysis',
+      "title": 'Extremely elevated lactate persisting after cessation of exertion',
+      "action": 'Indicator of lactic acidosis or tissue hypoxia. Requires urgent ground specialist assessment and oxygen therapy supervised by crew.'
     },
     {
-      "category": 'Biochemia, metabolizm i ostre stany zapalne: analiza potu',
-      "title": 'Krytycznie wysoki poziom jonow wapnia Ca 2 plus w pocie w ujeciu ciaglym',
-      "action": 'Sygnal gwaltownej demineralizacji kosci niosacej bezposrednie ryzyko kamicy nerkowej i zlaman patologicznych. Wymaga interwencji specjalisty endokrynologa lub lekarza misji, modyfikacji leczenia oraz rozwazenia wczesniejszego powrotu na Ziemie.'
+      "category": 'Biochemistry, Metabolism and Acute Inflammation: Sweat Analysis',
+      "title": 'Persistently critical sweat calcium ion Ca 2 plus levels',
+      "action": 'Signal of rapid bone demineralization posing acute renal stone and pathological fracture risk. Requires endocrinologist or flight surgeon intervention, therapy update, and early Earth return assessment.'
     },
     {
-      "category": 'Zagrozenia srodowiskowe kabiny i skafandra',
-      "title": 'Gwaltowny wzrost stezenia CO2 lub spadek O2 w skafandrze EVA lub odizolowanym module z jednoczesnym spadkiem SpO2 i zaburzeniami EEG',
-      "action": 'Ostra hiperkapnia lub hipoksja: zatrucie dwutlenkiem wegla lub niedotlenienie. Natychmiastowa akcja ratunkowa drugiego astronauty: podlaczenie zapasowego zrodla tlenu, ewakuacja ze strefy zagrozenia, i interwencja medyczna.'
+      "category": 'Cabin and Suit Environmental Hazards',
+      "title": 'Sudden CO2 surge or O2 drop in EVA suit or isolated module paired with falling SpO2 and EEG anomalies',
+      "action": 'Acute hypercapnia or hypoxia: CO2 toxicity or oxygen starvation. Immediate crewmate rescue: connect backup O2 supply, evacuate hazard zone, and administer emergency care.'
     },
     {
-      "category": 'Zagrozenia srodowiskowe kabiny i skafandra',
-      "title": 'Skokowy wzrost tlenku azotu NO wykryty przez czujniki w odziezy podczas awarii lub pozaru',
-      "action": 'Ostre chemiczne podraznienie lub obrzek drog oddechowych. Konieczne zalozenie masek tlenowych przez zaloge, ewakuacja poszkodowanego, konsultacja z pulmonologiem lub toksykologiem oraz powrot na Ziemie w razie niewydolnosci oddechowej.'
+      "category": 'Cabin and Suit Environmental Hazards',
+      "title": 'Nitric oxide NO spike detected by garment sensors during system failure or fire',
+      "action": 'Acute chemical airway irritation or edema. Don oxygen masks immediately, evacuate casualty, consult pulmonology or toxicology, and evacuate to Earth if respiratory failure develops.'
     },
     {
-      "category": 'Zagrozenia srodowiskowe kabiny i skafandra',
-      "title": 'Przekroczenie krytycznej dawki promieniowania jonizujacego: dozymetry, na przyklad podczas burzy slonecznej na EVA',
-      "action": 'Ryzyko ostrej choroby popromiennej ARS. Natychmiastowe schronienie w oslonietym module z pomoca zalogi, wdrozenie protokolu medycznego przez specjalistow z Ziemi oraz pilny powrot na Ziemie na leczenie hematologiczne lub onkologiczne.'
+      "category": 'Cabin and Suit Environmental Hazards',
+      "title": 'Critical ionizing radiation dose exceeded on dosimeters, e.g. during solar storm on EVA',
+      "action": 'Risk of acute radiation syndrome ARS. Seek immediate shelter in radiation-hardened module with crew aid, initiate specialist ground protocol, and expedite Earth return.'
     },
     {
-      "category": 'Zagrozenia srodowiskowe kabiny i skafandra',
-      "title": 'Awaria chlodzenia w skafandrze EVA prowadzaca do skrajnego wzrostu temperatury ciala i tetna',
-      "action": 'Udar cieplny. Natychmiastowe przerwanie misji na zewnatrz stacji przez partnera, szybkie schlodzenie organizmu w sluzie przez zaloge i nadzor lekarza misji.'
+      "category": 'Cabin and Suit Environmental Hazards',
+      "title": 'EVA suit cooling loop failure driving extreme hyperthermia and tachycardia',
+      "action": 'Heat stroke risk. Immediate EVA abort initiated by partner, rapid cooling inside the airlock by crew, and continuous flight surgeon supervision.'
     }
   ],
 }
 
-# Konfiguracja strumienia telemetrii
+# Telemetry stream configuration
 stream_config = {
     "active": True,
     "interval": 2.0,
@@ -1318,25 +1318,25 @@ def feed_astronaut_to_model(astro: dict, eclss: dict, natychmiast: bool = False)
     ui_status = status_na_ui(snap.get("ogolny", {}).get("status"))
     astro["overallStatus"] = ui_status
     if ui_status == "critical":
-        astro["statusLabel"] = "Podwyzszone ryzyko"
+        astro["statusLabel"] = "Elevated Risk"
     elif ui_status == "warning":
-        astro["statusLabel"] = "Wymagana obserwacja"
+        astro["statusLabel"] = "Observation Required"
     else:
-        astro["statusLabel"] = "Stan stabilny"
+        astro["statusLabel"] = "Stable Condition"
 
     indeks = snap.get("ogolny", {}).get("indeks")
     anom_val = snap.get("anomalia", {}).get("wynik")
     odchylone = snap.get("raport", {}).get("odchylone", [])
-    idx_txt = f"{indeks:.0f}/100" if indeks is not None else "brak"
+    idx_txt = f"{indeks:.0f}/100" if indeks is not None else "N/A"
     if odchylone:
         first_dev = odchylone[0]
         if first_dev.startswith("1. "):
             first_dev = first_dev[3:]
-        astro["statusDescription"] = f"Indeks modelu {idx_txt}. {first_dev}"
+        astro["statusDescription"] = f"Model index {idx_txt}. {first_dev}"
     elif anom_val is not None and anom_val >= 75:
-        astro["statusDescription"] = f"Indeks modelu {idx_txt}, siec anomalii {anom_val:.0f}/100. Monitoruj profil sygnalowy."
+        astro["statusDescription"] = f"Model index {idx_txt}, anomaly network {anom_val:.0f}/100. Monitor signal profile."
     else:
-        astro["statusDescription"] = f"Indeks modelu {idx_txt}. Wszystkie obszary utrzymuja sie w normie referencyjnej i osobistej."
+        astro["statusDescription"] = f"Model index {idx_txt}. All domains remain within reference and personal baselines."
     return snap
 
 
@@ -1402,11 +1402,11 @@ def compute_crew_summary(astronauts: list, eclss: dict) -> dict:
             "id": a.get("id"),
             "name": a.get("name"),
             "overallStatus": a.get("overallStatus", "normal"),
-            "statusLabel": a.get("statusLabel", "Stan stabilny"),
+            "statusLabel": a.get("statusLabel", "Stable Condition"),
             "index": round(float(idx), 1) if idx is not None else None,
             "anomaly": round(float(an_w), 1) if an_w is not None else None,
             "topDeviations": [o.get("nazwa") for o in dev_areas[:3]],
-            "topRecommendation": astro_recs[0] if astro_recs else "Utrzymac biezacy harmonogram i obserwacje.",
+            "topRecommendation": astro_recs[0] if astro_recs else "Maintain current schedule and routine observation.",
         })
 
     priority.sort(key=lambda item: (item["index"] if item["index"] is not None else 999.0))
@@ -1418,30 +1418,30 @@ def compute_crew_summary(astronauts: list, eclss: dict) -> dict:
 
     if critical > 0:
         overall = "critical"
-        label = "Podwyzszone ryzyko"
-        noun_c = "czlonka" if critical == 1 else "czlonkow"
+        label = "Elevated Risk"
+        noun_c = "crew member" if critical == 1 else "crew members"
         summary_text = (
-            f"Sredni indeks gotowosci zalogi wynosi {crew_index:.1f}/100. "
-            f"Model wskazuje stan krytyczny u {critical} {noun_c} zalogi oraz wymaga pilnej weryfikacji odchylen."
+            f"Average crew readiness index is {crew_index:.1f}/100. "
+            f"Model indicates critical status for {critical} {noun_c} and requires urgent deviation review."
         )
     elif warning > 0:
         overall = "warning"
-        label = "Wymagana obserwacja"
-        noun_w = "czlonka" if warning == 1 else "czlonkow"
+        label = "Observation Required"
+        noun_w = "crew member" if warning == 1 else "crew members"
         summary_text = (
-            f"Sredni indeks gotowosci zalogi wynosi {crew_index:.1f}/100. "
-            f"U {warning} {noun_w} zalogi zarejestrowano odchylenia parametrow od norm referencyjnych lub osobistych."
+            f"Average crew readiness index is {crew_index:.1f}/100. "
+            f"Parameter deviations from reference or personal baselines detected for {warning} {noun_w}."
         )
     elif total == 0:
         overall = "normal"
-        label = "Brak zalogi"
-        summary_text = "Brak aktywnych czlonkow zalogi w biezacej misji. Dodaj astronauci w zakladce Ustawienia."
+        label = "No crew"
+        summary_text = "No active crew members in the current mission. Add astronauts in the Settings tab."
     else:
         overall = "normal"
-        label = "Stan stabilny"
+        label = "Stable Condition"
         summary_text = (
-            f"Sredni indeks gotowosci zalogi wynosi {crew_index:.1f}/100. "
-            "Model podsumowujacy potwierdza stabilny profil biometryczny i srodowiskowy calego zespolu."
+            f"Average crew readiness index is {crew_index:.1f}/100. "
+            "Summarizing model confirms a stable biometric and environmental profile across the entire crew."
         )
 
     return {
@@ -1623,12 +1623,12 @@ def telemetry_background_thread():
 
 @app.route("/")
 def index():
-    return send_from_directory(".", "index.html")
+    return send_from_directory(BASE_DIR, "index.html")
 
 
 @app.route("/<path:filename>")
 def static_files(filename):
-    return send_from_directory(".", filename)
+    return send_from_directory(BASE_DIR, filename)
 
 
 @app.route("/api/state", methods=["GET"])
@@ -1774,7 +1774,7 @@ def post_telemetry_entry():
 
             history = target.setdefault("telemetryHistory", [])
             history.append({
-                "day": f"Dzien {184 + len(history)}",
+                "day": f"Day {184 + len(history)}",
                 "hr": v["hr"],
                 "bpSys": v["bpSys"],
                 "spo2": v["spo2"],
@@ -1787,11 +1787,11 @@ def post_telemetry_entry():
             if forced_status in ("normal", "warning", "critical"):
                 target["overallStatus"] = forced_status
                 if forced_status == "normal":
-                    target["statusLabel"] = "Stan stabilny"
+                    target["statusLabel"] = "Stable Condition"
                 elif forced_status == "warning":
-                    target["statusLabel"] = "Wymagana obserwacja"
+                    target["statusLabel"] = "Observation Required"
                 else:
-                    target["statusLabel"] = "Podwyzszone ryzyko"
+                    target["statusLabel"] = "Elevated Risk"
         elif isinstance(data.get("pomiary"), list):
             for a in app_state["astronauts"]:
                 c = get_or_create_centrum(a["id"])
@@ -1814,7 +1814,7 @@ def get_model_summary():
         if astro_id:
             target = next((a for a in app_state["astronauts"] if a["id"] == astro_id), None)
             if not target:
-                return jsonify({"error": "Nie znaleziono astronauty"}), 404
+                return jsonify({"error": "Astronaut not found"}), 404
             return jsonify({
                 "astroId": target["id"],
                 "name": target["name"],
@@ -1847,13 +1847,13 @@ def get_raport_txt():
         if astro_id:
             target = next((a for a in astros if a["id"] == astro_id), None)
             if target and target.get("modelSummary", {}).get("raport"):
-                txt = f"Astronauta: {target['name']}\n\n" + raport_jako_tekst(target["modelSummary"]["raport"])
+                txt = f"Astronaut: {target['name']}\n\n" + raport_jako_tekst(target["modelSummary"]["raport"])
             else:
-                txt = "Brak danych modelu dla wskazanego astronauty."
+                txt = "No model data available for the specified astronaut."
         else:
             cs = app_state.get("crewSummary", {})
             lines = [
-                f"Raport zbiorczy modelu HMS-of-A : {cs.get('updatedAt', '')}",
+                f"HMS-of-A Crew Summary Report : {cs.get('updatedAt', '')}",
                 cs.get("summaryText", ""),
                 "",
             ]
@@ -1867,7 +1867,7 @@ def get_raport_txt():
         return Response(
             txt,
             mimetype="text/plain; charset=utf-8",
-            headers={"Content-Disposition": "attachment; filename=raport_hms.txt"},
+            headers={"Content-Disposition": "attachment; filename=hms_report.txt"},
         )
 
 
@@ -1877,11 +1877,11 @@ def import_garmin():
     with state_lock:
         existing = next((a for a in app_state["astronauts"] if a.get("source") == "Garmin Health Telemetry Link"), None)
         if existing:
-            return jsonify({"success": False, "error": "Profil Garmin zostal juz zintegrowany.", "astronaut": existing}), 409
+            return jsonify({"success": False, "error": "Garmin profile has already been integrated.", "astronaut": existing}), 409
 
         new_id = f"astro-garmin-{int(time.time() * 1000)}"
-        name = data.get("name", "Marek Kosmonauta")
-        initials = "".join([part[0] for part in name.strip().split()[:2]]).upper() or "MK"
+        name = data.get("name", "Marek Orbit")
+        initials = "".join([part[0] for part in name.strip().split()[:2]]).upper() or "MO"
         new_user = {
             "id": new_id,
             "login": f"garmin{int(time.time())}",
@@ -1889,7 +1889,7 @@ def import_garmin():
             "name": name,
             "role": "",
             "title": "",
-            "accessLevel": "Konto osobiste",
+            "accessLevel": "Personal account",
             "avatarCode": initials,
         }
         new_astro = {
@@ -1902,8 +1902,8 @@ def import_garmin():
             "missionDay": 184,
             "evaHours": 8,
             "overallStatus": "normal",
-            "statusLabel": "Stan stabilny",
-            "statusDescription": "Strumien biometryczny pobierany z sensorow Garmin Elevate.",
+            "statusLabel": "Stable Condition",
+            "statusDescription": "Real-time biometric stream captured from Garmin Elevate optical sensors.",
             "source": "Garmin Health Telemetry Link",
             "vitals": {
                 "hr": 68, "hrUnit": "bpm",
@@ -1911,35 +1911,35 @@ def import_garmin():
                 "hrv": 66, "hrvUnit": "ms",
                 "bpSys": 118, "bpDia": 76, "bpUnit": "mmHg",
                 "spo2": 99, "spo2Unit": "%",
-                "temp": 36.6, "tempUnit": "st. C",
-                "resp": 14, "respUnit": "oddech/min",
+                "temp": 36.6, "tempUnit": "deg C",
+                "resp": 14, "respUnit": "breaths/min",
                 "radDose": 3.2, "radUnit": "mSv",
-                "boneDensity": 99, "boneUnit": "% normy",
-                "muscleMass": 100, "muscleUnit": "% normy",
+                "boneDensity": 99, "boneUnit": "% norm",
+                "muscleMass": 100, "muscleUnit": "% norm",
                 "hydration": 96, "hydrationUnit": "%",
-                "sleepHours": 7.9, "sleepUnit": "godz.",
-                "sleepScore": 88, "sleepScoreUnit": "pkt",
-                "stressLevel": 21, "stressUnit": "pkt",
-                "bodyBattery": 88, "bodyBatteryUnit": "pkt",
+                "sleepHours": 7.9, "sleepUnit": "h",
+                "sleepScore": 88, "sleepScoreUnit": "pts",
+                "stressLevel": 21, "stressUnit": "pts",
+                "bodyBattery": 88, "bodyBatteryUnit": "pts",
                 "cortisol": 4.1, "cortisolUnit": "ng/ml",
                 "lactate": 1.5, "lactateUnit": "mmol/l",
                 "cognitiveReadiness": 93, "cognitiveUnit": "%",
             },
             "periodicTests": [],
             "telemetryHistory": [
-                {"day": "Dzien 179", "hr": 67, "bpSys": 117, "spo2": 99, "stress": 22, "rad": 2.8},
-                {"day": "Dzien 180", "hr": 69, "bpSys": 118, "spo2": 98, "stress": 24, "rad": 2.9},
-                {"day": "Dzien 181", "hr": 66, "bpSys": 116, "spo2": 99, "stress": 20, "rad": 3.0},
-                {"day": "Dzien 182", "hr": 70, "bpSys": 119, "spo2": 99, "stress": 23, "rad": 3.1},
-                {"day": "Dzien 183", "hr": 68, "bpSys": 118, "spo2": 99, "stress": 21, "rad": 3.1},
-                {"day": "Dzien 184", "hr": 68, "bpSys": 118, "spo2": 99, "stress": 21, "rad": 3.2},
+                {"day": "Day 179", "hr": 67, "bpSys": 117, "spo2": 99, "stress": 22, "rad": 2.8},
+                {"day": "Day 180", "hr": 69, "bpSys": 118, "spo2": 98, "stress": 24, "rad": 2.9},
+                {"day": "Day 181", "hr": 66, "bpSys": 116, "spo2": 99, "stress": 20, "rad": 3.0},
+                {"day": "Day 182", "hr": 70, "bpSys": 119, "spo2": 99, "stress": 23, "rad": 3.1},
+                {"day": "Day 183", "hr": 68, "bpSys": 118, "spo2": 99, "stress": 21, "rad": 3.1},
+                {"day": "Day 184", "hr": 68, "bpSys": 118, "spo2": 99, "stress": 21, "rad": 3.2},
             ],
             "orders": [
                 {
                     "id": "ord-g1",
                     "date": "2026-11-14",
                     "author": "Marek Marczak",
-                    "text": "Pomiary z czujnika Garmin zintegrowane prawidlowo z glowna szyna telemetrii HMS-of-A.",
+                    "text": "Garmin sensor measurements integrated cleanly into the main HMS-of-A telemetry bus.",
                     "priority": "standard",
                 }
             ],
@@ -2032,7 +2032,7 @@ def reset_mission():
 def add_astronaut():
     data = request.get_json() or {}
     with state_lock:
-        name = data.get("name", "Nowy Astronauta")
+        name = data.get("name", "New Astronaut")
         role = data.get("role", "")
         title = data.get("title", "")
         login = data.get("login", f"astro{int(time.time())}")
@@ -2040,7 +2040,7 @@ def add_astronaut():
         type_role = data.get("type", "astro")
 
         if type_role == "kierownik" and not role:
-            role = "Kierownik"
+            role = "Commander"
 
         new_id = f"{'kierownik' if type_role == 'kierownik' else 'astro'}-{int(time.time() * 1000)}"
         initials = "".join([part[0] for part in name.strip().split()[:2]]).upper() or "AS"
@@ -2052,7 +2052,7 @@ def add_astronaut():
             "name": name,
             "role": role,
             "title": title,
-            "accessLevel": "Nadzor pelny" if type_role == "kierownik" else "Konto osobiste",
+            "accessLevel": "Full oversight" if type_role == "kierownik" else "Personal account",
             "avatarCode": initials
         }
         app_state["users"].append(new_user)
@@ -2076,31 +2076,31 @@ def add_astronaut():
                 "missionDay": 184,
                 "evaHours": 0,
                 "overallStatus": "normal",
-                "statusLabel": "Stan stabilny",
-                "statusDescription": "Nowo przyjety czlonek zalogi. Parametry bazowe wprowadzone do systemu.",
+                "statusLabel": "Stable Condition",
+                "statusDescription": "Newly onboarded crew member. Baseline parameters loaded into the system.",
                 "vitals": {
                     "hr": hr, "hrUnit": "bpm",
                     "rr": round(60000 / max(hr, 30)), "rrUnit": "ms",
                     "hrv": 65, "hrvUnit": "ms",
                     "bpSys": bp_sys, "bpDia": bp_dia, "bpUnit": "mmHg",
                     "spo2": spo2, "spo2Unit": "%",
-                    "temp": temp, "tempUnit": "st. C",
-                    "resp": resp, "respUnit": "oddech/min",
-                    "stressLevel": 15, "stressUnit": "pkt",
-                    "bodyBattery": 90, "bodyBatteryUnit": "pkt",
+                    "temp": temp, "tempUnit": "deg C",
+                    "resp": resp, "respUnit": "breaths/min",
+                    "stressLevel": 15, "stressUnit": "pts",
+                    "bodyBattery": 90, "bodyBatteryUnit": "pts",
                     "radDose": 0.5, "radUnit": "mSv",
-                    "boneDensity": 100, "boneUnit": "% normy",
-                    "muscleMass": 100, "muscleUnit": "% normy",
+                    "boneDensity": 100, "boneUnit": "% norm",
+                    "muscleMass": 100, "muscleUnit": "% norm",
                     "hydration": 98, "hydrationUnit": "%",
-                    "sleepHours": 8.0, "sleepUnit": "godz.",
-                    "sleepScore": 88, "sleepScoreUnit": "pkt",
+                    "sleepHours": 8.0, "sleepUnit": "h",
+                    "sleepScore": 88, "sleepScoreUnit": "pts",
                     "cortisol": 4.0, "cortisolUnit": "ng/ml",
                     "lactate": 1.5, "lactateUnit": "mmol/l",
                     "cognitiveReadiness": 92, "cognitiveUnit": "%",
                 },
                 "periodicTests": [],
                 "telemetryHistory": [
-                    {"day": "Dzien 184", "hr": hr, "bpSys": bp_sys, "spo2": spo2, "stress": 15, "rad": 0.5}
+                    {"day": "Day 184", "hr": hr, "bpSys": bp_sys, "spo2": spo2, "stress": 15, "rad": 0.5}
                 ],
                 "orders": [],
                 "dailyChecks": []
@@ -2143,8 +2143,8 @@ def delete_astronaut(astro_id):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"Start serwera HMS-of-A na porcie {port}...")
-    print(f"Adres URL: http://localhost:{port}/")
+    print(f"Starting HMS-of-A server on port {port}...")
+    print(f"Server URL: http://localhost:{port}/")
 
     thread = threading.Thread(target=telemetry_background_thread, daemon=True)
     thread.start()
@@ -2153,4 +2153,4 @@ if __name__ == "__main__":
         app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
     except KeyboardInterrupt:
         stop_event.set()
-        print("Zatrzymano serwer HMS-of-A.")
+        print("HMS-of-A server stopped.")

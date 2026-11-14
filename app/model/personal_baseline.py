@@ -1,9 +1,9 @@
 """
-Osobista norma kazdego parametru: typowa wartosc i zmiennosc u danej osoby oraz w kabinie.
+Adaptive personal and cabin baselines per metric: typical value and variance.
 
-Statystyki sa wykladniczo wazone, aktualizowane tylko wtedy,
-gdy parametr miesci sie w normie referencyjnej i dane sa pewne,
-zeby baza nie przyzwyczaila sie do stanu alarmowego.
+Statistics are exponentially weighted and updated only when the metric
+is within reference thresholds and data confidence is sufficient, preventing
+the baseline from drifting during alert conditions.
 """
 from __future__ import annotations
 
