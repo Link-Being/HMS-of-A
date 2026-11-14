@@ -262,6 +262,9 @@
           <button class="nav-tab ${activeTab === 'instrukcje' ? 'active' : ''}" data-tab="instrukcje">
             Instrukcje i Profilaktyka
           </button>
+          <button class="nav-tab ${activeTab === 'harmonogram' ? 'active' : ''}" data-tab="harmonogram">
+            Harmonogram Dnia
+          </button>
           <button class="nav-tab ${activeTab === 'motywacja' ? 'active' : ''}" data-tab="motywacja">
             Modul Motywacji
           </button>
@@ -3438,6 +3441,33 @@
     }
   }
 
+  // WIDOK 4B: Harmonogram Dnia - pusty bez przykladowych danych
+  function renderHarmonogramDnia() {
+    const mainEl = document.getElementById('app-main');
+    if (!mainEl) return;
+
+    mainEl.innerHTML = `
+      <div class="view-header">
+        <div>
+          <h1 class="view-title">Harmonogram Dnia</h1>
+          <p class="view-subtitle">Dzienny rozklad zadan i badan</p>
+        </div>
+      </div>
+
+      <div class="card-section" id="daily-schedule-empty-panel">
+        <div class="section-title-bar">
+          <h2>Pozycje harmonogramu</h2>
+          <span class="badge-tag">0 pozycji</span>
+        </div>
+        <p style="color: var(--text-muted); padding: 36px 16px; text-align: center;">
+          Harmonogram dnia jest pusty. Brak zaplanowanych pozycji.
+        </p>
+      </div>
+    `;
+
+    enforceConstraints(mainEl);
+  }
+
   // WIDOK 5: Dziennik Zdarzen Medycznych
   function renderDziennik() {
     const mainEl = document.getElementById('app-main');
@@ -4558,6 +4588,8 @@
       renderTelemetria();
     } else if (activeTab === 'instrukcje') {
       renderInstrukcje();
+    } else if (activeTab === 'harmonogram') {
+      renderHarmonogramDnia();
     } else if (activeTab === 'motywacja') {
       renderMotywacja();
     } else if (activeTab === 'dziennik') {
