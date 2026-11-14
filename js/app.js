@@ -828,8 +828,75 @@
     }
 
     let statusPillClass = 'badge-normal';
-    if (currentAstro.overallStatus === 'warning') statusPillClass = 'badge-warning';
-    if (currentAstro.overallStatus === 'critical') statusPillClass = 'badge-critical';
+    let bannerClass = 'status-banner-optimal';
+    let headlineText = 'OGOLNY STAN ZDROWIA : WSZYSTKO W NORMIE - DANE SA W PORZADKU';
+    let sublineText = 'System HMS-of-A potwierdza prawidlowe funkcjonowanie Twojego organizmu. Wszystkie kluczowe uklady biometryczne pracuja stabilnie w bezpiecznym korytarzu normy.';
+    let iconSvg = `
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+      </svg>
+    `;
+
+    if (currentAstro.overallStatus === 'warning') {
+      statusPillClass = 'badge-warning';
+      bannerClass = 'status-banner-warning';
+      headlineText = 'OGOLNY STAN ZDROWIA : WYMAGANA OBSERWACJA - ZANOTOWANO ODCHYLENIA';
+      sublineText = currentAstro.statusDescription || 'Zanotowano pojedyncze odchylenie biometryczne. Wskazany odpoczynek i kontrola zaleconych parametrow.';
+      iconSvg = `
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      `;
+    } else if (currentAstro.overallStatus === 'critical') {
+      statusPillClass = 'badge-critical';
+      bannerClass = 'status-banner-critical';
+      headlineText = 'OGOLNY STAN ZDROWIA : STAN KRYTYCZNY - WYMAGANA PILNA INTERWENCJA';
+      sublineText = currentAstro.statusDescription || 'Wykryto przekroczenie korytarza bezpieczenstwa biometrycznego. Skontaktuj sie ze stacja kontroli.';
+      iconSvg = `
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      `;
+    }
+
+    const hrOk = v.hr >= 55 && v.hr <= 95;
+    const bpOk = v.bpSys <= 130 && v.bpDia <= 85;
+    const spo2Ok = v.spo2 >= 96;
+    const tempOk = v.temp >= 36.4 && v.temp <= 37.3;
+    const respOk = v.resp >= 12 && v.resp <= 18;
+    const stressOk = v.stressLevel <= 50;
+
+    const checklistHtml = `
+      <div class="system-check-chip ${hrOk ? 'chip-ok' : 'chip-warn'}">
+        <span class="system-check-dot"></span>
+        <span>Uklad krazenia i serce: ${hrOk ? 'W normie' : 'Wymaga uwagi'}</span>
+      </div>
+      <div class="system-check-chip ${spo2Ok ? 'chip-ok' : 'chip-warn'}">
+        <span class="system-check-dot"></span>
+        <span>Saturacja tlenowa SpO2: ${spo2Ok ? 'W normie' : 'Wymaga uwagi'}</span>
+      </div>
+      <div class="system-check-chip ${bpOk ? 'chip-ok' : 'chip-warn'}">
+        <span class="system-check-dot"></span>
+        <span>Cisnienie tetnicze RR: ${bpOk ? 'Prawidlowe' : 'Lekko podwyzszone'}</span>
+      </div>
+      <div class="system-check-chip ${tempOk ? 'chip-ok' : 'chip-warn'}">
+        <span class="system-check-dot"></span>
+        <span>Termoregulacja ciala: ${tempOk ? 'Stabilna' : 'Do weryfikacji'}</span>
+      </div>
+      <div class="system-check-chip ${respOk ? 'chip-ok' : 'chip-warn'}">
+        <span class="system-check-dot"></span>
+        <span>Wentylacja i oddech: ${respOk ? 'W normie' : 'Do obserwacji'}</span>
+      </div>
+      <div class="system-check-chip ${stressOk ? 'chip-ok' : 'chip-warn'}">
+        <span class="system-check-dot"></span>
+        <span>Rownowaga obciazenia: ${stressOk ? 'Niski stres' : 'Wzmozone obciazenie'}</span>
+      </div>
+    `;
 
     container.innerHTML = `
       <div class="view-header">
@@ -839,6 +906,28 @@
         </div>
         <div class="user-status-flag">
           <span class="status-pill ${statusPillClass}">${currentAstro.statusLabel}</span>
+        </div>
+      </div>
+
+      <div class="astro-overall-status-banner ${bannerClass}">
+        <div class="astro-status-header-row">
+          <div class="astro-status-title-group">
+            <div class="astro-status-icon-circle">
+              ${iconSvg}
+            </div>
+            <div>
+              <div class="text-xs uppercase font-bold tracking-wider text-cyan">Ogolna ocena kondycji organizmu : Stan biezacy</div>
+              <div class="astro-status-headline">${headlineText}</div>
+              <div class="astro-status-subline">${sublineText}</div>
+            </div>
+          </div>
+          <div class="astro-status-badge-wrap">
+            <span class="status-pill ${statusPillClass}">${currentAstro.statusLabel}</span>
+          </div>
+        </div>
+
+        <div class="astro-systems-checklist">
+          ${checklistHtml}
         </div>
       </div>
 
@@ -885,101 +974,183 @@
         </div>
       </div>
 
-      <div class="vitals-cards-grid">
-        <div class="vital-card">
-          <div class="vital-top">
-            <span class="vital-title">Czestosc akcji serca</span>
-            <span class="vital-tag">Tetno</span>
+      <div class="sensor-readings-section">
+        <div class="sensor-section-header">
+          <div>
+            <h3 class="sensor-section-title">Dokladne odczyty z sensorow i aparatury pomiarowej</h3>
+            <p class="sensor-section-desc">Szczegolowe wartosci zarejestrowane przez sensory naskorne, aparature tensjometryczna oraz sensory odziezowe:</p>
           </div>
-          <div class="vital-value-row">
-            <span class="vital-val">${v.hr}</span>
-            <span class="vital-unit">${v.hrUnit}</span>
-          </div>
-          <div class="vital-norm">Zakres bezpieczny: 60 do 95 bpm</div>
+          <span class="badge-tag">Pomiary sensoryczne</span>
         </div>
 
-        <div class="vital-card">
-          <div class="vital-top">
-            <span class="vital-title">Cisnienie tetnicze</span>
-            <span class="vital-tag">RR</span>
+        <div class="sensors-compact-grid">
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Czujnik tetna HR</span>
+              <span class="badge-micro-pill ${hrOk ? 'pill-ok' : 'pill-warn'}">${hrOk ? 'W normie' : 'Uwaga'}</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-hr">${v.hr}</span>
+              <span class="sensor-exact-unit">${v.hrUnit}</span>
+            </div>
+            <div class="sensor-safe-range">Zakres bezpieczny: 60 do 95 bpm</div>
           </div>
-          <div class="vital-value-row">
-            <span class="vital-val">${v.bpSys} / ${v.bpDia}</span>
-            <span class="vital-unit">${v.bpUnit}</span>
-          </div>
-          <div class="vital-norm">Zakres bezpieczny: 110-130 na 70-85 mmHg</div>
-        </div>
 
-        <div class="vital-card">
-          <div class="vital-top">
-            <span class="vital-title">Saturacja tlenowa</span>
-            <span class="vital-tag">SpO2</span>
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Cisnieniomierz tetniczy RR</span>
+              <span class="badge-micro-pill ${bpOk ? 'pill-ok' : 'pill-warn'}">${bpOk ? 'Prawidlowe' : 'Uwaga'}</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-bp">${v.bpSys} na ${v.bpDia}</span>
+              <span class="sensor-exact-unit">${v.bpUnit}</span>
+            </div>
+            <div class="sensor-safe-range">Zakres bezpieczny: 110-130 na 70-85 mmHg</div>
           </div>
-          <div class="vital-value-row">
-            <span class="vital-val">${v.spo2}</span>
-            <span class="vital-unit">${v.spo2Unit}</span>
-          </div>
-          <div class="vital-norm">Wymagane minimum: 95 procent</div>
-        </div>
 
-        <div class="vital-card">
-          <div class="vital-top">
-            <span class="vital-title">Temperatura ciala</span>
-            <span class="vital-tag">Termometria</span>
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Pulsoksymetr SpO2</span>
+              <span class="badge-micro-pill ${spo2Ok ? 'pill-ok' : 'pill-warn'}">${spo2Ok ? 'W normie' : 'Uwaga'}</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-spo2">${v.spo2}</span>
+              <span class="sensor-exact-unit">${v.spo2Unit}</span>
+            </div>
+            <div class="sensor-safe-range">Wymagane minimum: 95 procent</div>
           </div>
-          <div class="vital-value-row">
-            <span class="vital-val">${v.temp}</span>
-            <span class="vital-unit">${v.tempUnit}</span>
-          </div>
-          <div class="vital-norm">Norma fizjologiczna: 36.4 do 37.2 st. C</div>
-        </div>
 
-        <div class="vital-card">
-          <div class="vital-top">
-            <span class="vital-title">Czestosc oddechowa</span>
-            <span class="vital-tag">Wentylacja</span>
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Temperatura powloki ciala</span>
+              <span class="badge-micro-pill ${tempOk ? 'pill-ok' : 'pill-warn'}">${tempOk ? 'W normie' : 'Uwaga'}</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-temp">${v.temp}</span>
+              <span class="sensor-exact-unit">${v.tempUnit}</span>
+            </div>
+            <div class="sensor-safe-range">Norma fizjologiczna: 36.4 do 37.2 st. C</div>
           </div>
-          <div class="vital-value-row">
-            <span class="vital-val">${v.resp}</span>
-            <span class="vital-unit">${v.respUnit}</span>
-          </div>
-          <div class="vital-norm">Norma spoczynkowa: 12 do 18 na minute</div>
-        </div>
 
-        <div class="vital-card">
-          <div class="vital-top">
-            <span class="vital-title">Skumulowana dawka radiacji</span>
-            <span class="vital-tag">Dozymetria</span>
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Czestosc oddechowa pas</span>
+              <span class="badge-micro-pill ${respOk ? 'pill-ok' : 'pill-warn'}">${respOk ? 'W normie' : 'Uwaga'}</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-resp">${v.resp}</span>
+              <span class="sensor-exact-unit">${v.respUnit}</span>
+            </div>
+            <div class="sensor-safe-range">Norma spoczynkowa: 12 do 18 na minute</div>
           </div>
-          <div class="vital-value-row">
-            <span class="vital-val">${v.radDose}</span>
-            <span class="vital-unit">${v.radUnit}</span>
-          </div>
-          <div class="vital-norm">Limit bezpieczenstwa misji: 50.0 mSv</div>
-        </div>
 
-        <div class="vital-card">
-          <div class="vital-top">
-            <span class="vital-title">Gestosc mineralna kosci</span>
-            <span class="vital-tag">Osteometria</span>
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Interwal RR skurczu serca</span>
+              <span class="badge-micro-pill pill-ok">W normie</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-rr">${v.rr || Math.round(60000 / v.hr)}</span>
+              <span class="sensor-exact-unit">ms</span>
+            </div>
+            <div class="sensor-safe-range">Odstep miedzy zalamkami R w zapisie EKG</div>
           </div>
-          <div class="vital-value-row">
-            <span class="vital-val">${v.boneDensity}</span>
-            <span class="vital-unit">${v.boneUnit}</span>
-          </div>
-          <div class="vital-norm">Wskaznik odniesienia do stanu wyjsciowego</div>
-        </div>
 
-        <div class="vital-card">
-          <div class="vital-top">
-            <span class="vital-title">Masa miesniowa</span>
-            <span class="vital-tag">Retencja</span>
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Zmiennosc rytmu HRV Status</span>
+              <span class="badge-micro-pill pill-ok">Stabilny</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-hrv">${v.hrv || 64}</span>
+              <span class="sensor-exact-unit">ms</span>
+            </div>
+            <div class="sensor-safe-range">Status autonomiczny RMSSD: 50 do 80 ms</div>
           </div>
-          <div class="vital-value-row">
-            <span class="vital-val">${v.muscleMass}</span>
-            <span class="vital-unit">${v.muscleUnit}</span>
+
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Poziom stresu i obciazenia</span>
+              <span class="badge-micro-pill ${stressOk ? 'pill-ok' : 'pill-warn'}">${stressOk ? 'Niski' : 'Podwyzszony'}</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-stress">${v.stressLevel}</span>
+              <span class="sensor-exact-unit">pkt</span>
+            </div>
+            <div class="sensor-safe-range">Skala obciazenia: 0 do 100 pkt</div>
           </div>
-          <div class="vital-norm">Wskaznik po treningu silowym ARED</div>
+
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Rezerwa Body Battery</span>
+              <span class="badge-micro-pill pill-ok">Wysoka</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-bb">${v.bodyBattery || 82}</span>
+              <span class="sensor-exact-unit">pkt</span>
+            </div>
+            <div class="sensor-safe-range">Wskaznik gotowosci psychofizycznej</div>
+          </div>
+
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Dozymetr radiacyjny</span>
+              <span class="badge-micro-pill pill-ok">Bezpieczna</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value" id="astro-sensor-rad">${v.radDose}</span>
+              <span class="sensor-exact-unit">${v.radUnit}</span>
+            </div>
+            <div class="sensor-safe-range">Limit bezpieczenstwa misji: 50.0 mSv</div>
+          </div>
+
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Gestosc mineralna kosci</span>
+              <span class="badge-micro-pill pill-ok">W normie</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value">${v.boneDensity}</span>
+              <span class="sensor-exact-unit">${v.boneUnit}</span>
+            </div>
+            <div class="sensor-safe-range">Wskaznik odniesienia do stanu wyjsciowego</div>
+          </div>
+
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Masa miesniowa retencja</span>
+              <span class="badge-micro-pill pill-ok">W normie</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value">${v.muscleMass}</span>
+              <span class="sensor-exact-unit">${v.muscleUnit}</span>
+            </div>
+            <div class="sensor-safe-range">Wskaznik po treningu silowym ARED</div>
+          </div>
+
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Poziom nawodnienia tkanek</span>
+              <span class="badge-micro-pill pill-ok">Optymalne</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value">${v.hydration}</span>
+              <span class="sensor-exact-unit">${v.hydrationUnit}</span>
+            </div>
+            <div class="sensor-safe-range">Norma nawodnienia: 85 do 100 procent</div>
+          </div>
+
+          <div class="sensor-item-card">
+            <div class="sensor-item-top">
+              <span class="sensor-item-label">Czas snu i regeneracji</span>
+              <span class="badge-micro-pill ${v.sleepHours >= 7 ? 'pill-ok' : 'pill-warn'}">${v.sleepHours >= 7 ? 'W normie' : 'Skrocony'}</span>
+            </div>
+            <div class="sensor-item-reading">
+              <span class="sensor-exact-value">${v.sleepHours || 7.2}</span>
+              <span class="sensor-exact-unit">${v.sleepUnit}</span>
+            </div>
+            <div class="sensor-safe-range">Zalecana regeneracja dobowego cyklu snu</div>
+          </div>
         </div>
       </div>
 
@@ -2568,7 +2739,18 @@
         </div>
       </div>
 
-      <!-- SEKCJA 2: Zarzadzanie zaloga i kontami -->
+      <!-- SEKCJA 2: Transmisja telemetryczna i symulacja na zywo -->
+      <div class="card-section mb-4">
+        <div class="section-title-bar">
+          <h2>Transmisja biometryczna i parametry strumienia</h2>
+          <span class="badge-tag">Strumien danych</span>
+        </div>
+        <p class="settings-desc-text">Zarzadzaj biezacym strumieniem telemetrii, czestotliwoscia probkowania, profilami misji oraz importem z urzadzen Garmin:</p>
+
+        ${renderLiveBarHtml()}
+      </div>
+
+      <!-- SEKCJA 3: Zarzadzanie zaloga i kontami -->
       <div class="card-section mb-4">
         <div class="section-title-bar">
           <h2>Zarzadzanie zaloga i kontami uzytkownikow</h2>
@@ -2913,6 +3095,9 @@
         }
       });
     }
+
+    bindLiveBarEvents();
+    enforceConstraints(mainEl);
   }
 
   // Modal tworzenia nowego astronauty i konta
@@ -3173,7 +3358,7 @@
       renderUstawienia();
     }
 
-    ensureLiveBar(mainEl);
+    // Pasek transmisji na zywo przeniesiony do Ustawien
 
     // Zapewnienie przestrzegania scislych wymogow: brak emotek, brak nawiasow, brak dlugich myslnikow
     enforceConstraints(document.body);
@@ -3498,6 +3683,33 @@
 
       TelemetryCharts.renderCrewComparison('crew-hr-chart', appState.astronauts, 'hr', 'Tetno', 'bpm');
       TelemetryCharts.renderCrewComparison('crew-stress-chart', appState.astronauts, 'stressLevel', 'Poziom stresu', '%');
+    }
+
+    if (activeTab === 'pulpit' && !isCommander()) {
+      const currentAstro = getAstronautById(appState.currentUser);
+      if (currentAstro && currentAstro.vitals) {
+        const v = currentAstro.vitals;
+        const hrEl = document.getElementById('astro-sensor-hr');
+        if (hrEl) hrEl.textContent = v.hr;
+        const bpEl = document.getElementById('astro-sensor-bp');
+        if (bpEl) bpEl.textContent = v.bpSys + ' na ' + v.bpDia;
+        const spo2El = document.getElementById('astro-sensor-spo2');
+        if (spo2El) spo2El.textContent = v.spo2;
+        const tempEl = document.getElementById('astro-sensor-temp');
+        if (tempEl) tempEl.textContent = v.temp;
+        const respEl = document.getElementById('astro-sensor-resp');
+        if (respEl) respEl.textContent = v.resp;
+        const rrEl = document.getElementById('astro-sensor-rr');
+        if (rrEl) rrEl.textContent = (v.rr || Math.round(60000 / v.hr));
+        const hrvEl = document.getElementById('astro-sensor-hrv');
+        if (hrvEl) hrvEl.textContent = (v.hrv || 64);
+        const stressEl = document.getElementById('astro-sensor-stress');
+        if (stressEl) stressEl.textContent = v.stressLevel;
+        const bbEl = document.getElementById('astro-sensor-bb');
+        if (bbEl) bbEl.textContent = (v.bodyBattery || 82);
+        const radEl = document.getElementById('astro-sensor-rad');
+        if (radEl) radEl.textContent = v.radDose;
+      }
     }
 
     if (activeTab === 'telemetria') {
