@@ -866,20 +866,9 @@ const DEMO_ASTRONAUTS = [
 
 const INITIAL_DATA = {
   currentUser: null,
-  mode: 'real',
-  users: [
-    {
-      id: 'kierownik',
-      login: 'marczak',
-      password: 'marczak2026',
-      name: 'Marek Marczak',
-      role: 'Kierownik',
-      title: '',
-      accessLevel: 'Nadzor pelny',
-      avatarCode: 'MM'
-    }
-  ],
-  astronauts: [],
+  mode: 'demo',
+  users: DEMO_USERS,
+  astronauts: DEMO_ASTRONAUTS,
   realUsers: [
     {
       id: 'kierownik',
@@ -1285,7 +1274,7 @@ const INITIAL_DATA = {
         'Krok pierwszy: Natychmiastowe przerwanie wszelkich prac w zewnetrznych sekcjach stacji.',
         'Krok drugi: Odczyt wskazan dozymetrow osobistych i zgloszenie dawki do glownego systemu HMS.',
         'Krok trzeci: Przemieszczenie zalogi do centralnego modulu oslonowego otoczonego zasobnikami wody.',
-        'Krok czwarty: Przyjecie zalecanych antyoksydantow radioochronnych zgodnie z dyspozycja kierownika misji.'
+        'Krok czwarty: Przyjecie zalecanych antyoksydantow radioochronnych zgodnie z dyspozycja kierownika.'
       ],
       rationale: 'Promieniowanie kosmiczne oraz wiatr sloneczny moga wywolac ostre uszkodzenia komorkowe oraz oslabienie ukladu krwiotworczego.'
     },

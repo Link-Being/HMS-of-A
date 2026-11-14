@@ -15,7 +15,7 @@ Pod formularzem logowania znajduje sie czytelny wykaz wszystkich przykladowych k
 ## Tryby dzialania i konta dostepowe
 
 System umozliwia prace w dwoch srodowiskach:
-1. Tryb rzeczywisty: domyslny stan operacyjny. Baza zalogi jest poczatkowo wyczyszczona z personelu testowego i zawiera jedynie konto Kierownika Misji Marka Marczaka. Uzytkownik ma pelna swobode dodawania wlasnych astronautow, tworzenia kont dostepowych oraz rejestrowania biezacych pomiarow telemetrycznych.
+1. Tryb rzeczywisty: domyslny stan operacyjny. Baza zalogi jest poczatkowo wyczyszczona z personelu testowego i zawiera jedynie konto Kierownika Marka Marczaka. Uzytkownik ma pelna swobode dodawania wlasnych astronautow, tworzenia kont dostepowych oraz rejestrowania biezacych pomiarow telemetrycznych.
 2. Tryb demonstracyjny: srodowisko prezentacyjne z gotowa zaloga pieciu astronautow oraz kierownikiem misji, ze zdefiniowanymi odchyleniami biometrycznymi, badaniami okresowymi oraz historia telemetrii do celow pokazowych.
 
 Wykaz kont dostepnych w systemie:
@@ -80,7 +80,7 @@ Badania wykonywane cyklicznie lub interwencyjnie. Kazde badanie posiada zarejest
 
 ## Glowne moduly aplikacji
 
-### 1. Panel Glowny Kierownika Misji
+### 1. Panel Glowny Kierownika
 Marek Marczak posiada panel zarzadzania misja:
 - Zbiorcze podsumowanie zdrowotne zalogi
 - Monitorowanie parametrow stacji kabiny ECLSS w czasie rzeczywistym
@@ -93,7 +93,7 @@ Kazdy z pieciu astronautow ma dostep do wlasnego profilu:
 - Szczegolowy zestaw wskaznikow ciaglych
 - Tabela wynikow badan okresowych z dokladna data i godzina
 - Wykres osobisty trendu telemetrycznego z 6 dni
-- Zalecenia medyczne przekazane przez kierownika misji Marka Marczaka
+- Zalecenia medyczne przekazane przez kierownika Marka Marczaka
 - Codzienny raport wykonania treningow i samopoczucia
 
 ### 3. Baza Instrukcji i Profilaktyki Kosmicznej

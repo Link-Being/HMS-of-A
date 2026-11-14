@@ -1709,10 +1709,11 @@ body {
 
 /* EKRAN LOGOWANIA */
 .login-wrapper {
-  max-width: 520px;
-  margin: 50px auto;
+  max-width: 1040px;
+  margin: 30px auto;
   display: flex;
   flex-direction: column;
+  gap: 28px;
 }
 
 .login-card {
@@ -1720,7 +1721,9 @@ body {
   border: 1px solid var(--border-highlight);
   border-radius: var(--radius-lg);
   padding: 36px 40px;
+  max-width: 500px;
   width: 100%;
+  margin: 0 auto;
   box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5);
 }
 
@@ -2224,6 +2227,12 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.badge-supervisor {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
 }
 
 .demo-acc-creds {

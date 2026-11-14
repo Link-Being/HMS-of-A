@@ -6,7 +6,53 @@
   'use strict';
 
   // Inicjalizacja stanu z localStorage lub danych poczatkowych
-  const STORAGE_KEY = 'HMS_OF_A_STATE_V9';
+  const STORAGE_KEY = 'HMS_OF_A_STATE_V11';
+
+  function sanitizeCrewState(state) {
+    if (!state) return state;
+    const cleanUser = function(u) {
+      if (!u) return;
+      if (u.id === 'kierownik' || (u.name && u.name.indexOf('Marczak') !== -1)) {
+        u.id = 'kierownik';
+        u.name = 'Marek Marczak';
+        u.role = 'Kierownik';
+        u.title = '';
+        u.accessLevel = 'Nadzor pelny';
+        u.avatarCode = 'MM';
+        u.login = 'marczak';
+        u.password = 'marczak2026';
+      } else {
+        u.role = '';
+        u.title = '';
+        u.accessLevel = 'Konto osobiste';
+        if (u.id === 'astro-3' || (u.name && u.name.indexOf('Mysior') !== -1)) {
+          u.name = 'Krzysztof Mysior';
+          u.avatarCode = 'KM';
+          u.login = 'mysior';
+          u.password = 'mysior3';
+        }
+      }
+    };
+
+    const cleanAstronaut = function(a) {
+      if (!a) return;
+      a.role = '';
+      a.title = '';
+      if (a.id === 'astro-3' || (a.name && a.name.indexOf('Mysior') !== -1)) {
+        a.name = 'Krzysztof Mysior';
+        a.avatarCode = 'KM';
+      }
+    };
+
+    if (Array.isArray(state.users)) state.users.forEach(cleanUser);
+    if (Array.isArray(state.demoUsers)) state.demoUsers.forEach(cleanUser);
+    if (Array.isArray(state.realUsers)) state.realUsers.forEach(cleanUser);
+    if (Array.isArray(state.astronauts)) state.astronauts.forEach(cleanAstronaut);
+    if (Array.isArray(state.demoAstronauts)) state.demoAstronauts.forEach(cleanAstronaut);
+    if (Array.isArray(state.realAstronauts)) state.realAstronauts.forEach(cleanAstronaut);
+
+    return state;
+  }
 
   function loadState() {
     try {
@@ -18,19 +64,22 @@
       localStorage.removeItem('HMS_OF_A_STATE_V6');
       localStorage.removeItem('HMS_OF_A_STATE_V7');
       localStorage.removeItem('HMS_OF_A_STATE_V8');
+      localStorage.removeItem('HMS_OF_A_STATE_V9');
+      localStorage.removeItem('HMS_OF_A_STATE_V10');
 
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        return sanitizeCrewState(JSON.parse(saved));
       }
     } catch (e) {
       console.warn('Blad odczytu localStorage:', e);
     }
-    return JSON.parse(JSON.stringify(INITIAL_DATA));
+    return sanitizeCrewState(JSON.parse(JSON.stringify(INITIAL_DATA)));
   }
 
   function saveState(state) {
     try {
+      sanitizeCrewState(state);
       if (state.mode === 'real') {
         state.realUsers = JSON.parse(JSON.stringify(state.users));
         state.realAstronauts = JSON.parse(JSON.stringify(state.astronauts));
@@ -46,12 +95,12 @@
 
   const appState = loadState();
   if (!appState.mode) {
-    appState.mode = 'real';
+    appState.mode = 'demo';
   }
-  if (!appState.demoUsers) {
+  if (!appState.demoUsers || appState.demoUsers.length < 6) {
     appState.demoUsers = JSON.parse(JSON.stringify(DEMO_USERS));
   }
-  if (!appState.demoAstronauts) {
+  if (!appState.demoAstronauts || appState.demoAstronauts.length < 5) {
     appState.demoAstronauts = JSON.parse(JSON.stringify(DEMO_ASTRONAUTS));
   }
   if (!appState.realUsers) {
@@ -61,8 +110,11 @@
     appState.realAstronauts = [];
   }
 
-  // Wymuszenie usuniecia calej domyslnej zalogi w trybie rzeczywistym
-  if (appState.mode === 'real') {
+  // W trybie demonstracyjnym upewnij sie, ze zaloga demo jest aktywna
+  if (appState.mode === 'demo') {
+    appState.users = JSON.parse(JSON.stringify(appState.demoUsers));
+    appState.astronauts = JSON.parse(JSON.stringify(appState.demoAstronauts));
+  } else if (appState.mode === 'real') {
     appState.astronauts = (appState.astronauts || []).filter(function(a) {
       return !['astro-1', 'astro-2', 'astro-3', 'astro-4', 'astro-5'].includes(a.id);
     });
@@ -78,6 +130,7 @@
       appState.currentUser = null;
     }
   }
+  sanitizeCrewState(appState);
 
   function extractInitials(name) {
     if (!name) return 'AS';
@@ -253,6 +306,38 @@
 
   // WIDOK 0: Panel logowania
   function renderLoginPanel(container) {
+    let demoCardsHtml = '';
+    DEMO_USERS.forEach(function(u) {
+      const isLeader = u.id === 'kierownik';
+      demoCardsHtml += `
+        <div class="demo-acc-card">
+          <div class="demo-acc-head">
+            <div class="demo-acc-avatar">${u.avatarCode}</div>
+            <div class="demo-acc-info">
+              <div class="demo-acc-name">${u.name}</div>
+              ${u.role ? `<div class="demo-acc-role">${u.role}</div>` : ''}
+            </div>
+            <span class="badge-tag ${isLeader ? 'badge-supervisor' : ''}">${u.accessLevel}</span>
+          </div>
+
+          <div class="demo-acc-creds">
+            <div class="cred-item">
+              <span class="cred-label">LOGIN:</span>
+              <span class="cred-value">${u.login}</span>
+            </div>
+            <div class="cred-item">
+              <span class="cred-label">HASLO:</span>
+              <span class="cred-value">${u.password}</span>
+            </div>
+          </div>
+
+          <button type="button" class="btn btn-outline btn-sm btn-fill-demo" data-login="${u.login}" data-pass="${u.password}">
+            Wypelnij formularz tym kontem
+          </button>
+        </div>
+      `;
+    });
+
     container.innerHTML = `
       <div class="login-wrapper">
         <div class="login-card">
@@ -283,8 +368,39 @@
             </button>
           </form>
         </div>
+
+        <div class="demo-accounts-container">
+          <div class="demo-accounts-header">
+            <div class="demo-accounts-title">Wykaz przykladowych kont dostepowych</div>
+            <div class="demo-accounts-subtitle">
+              Wybierz profil z ponizszej listy lub kliknij przycisk obok konta aby automatycznie wprowadzic dane
+            </div>
+          </div>
+
+          <div class="demo-accounts-grid">
+            ${demoCardsHtml}
+          </div>
+        </div>
       </div>
     `;
+
+    // Nasluch przyciskow automatycznego wypelniania kont
+    container.querySelectorAll('.btn-fill-demo').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const loginVal = btn.getAttribute('data-login');
+        const passVal = btn.getAttribute('data-pass');
+        const inputLogin = document.getElementById('input-login');
+        const inputPass = document.getElementById('input-password');
+        if (inputLogin && inputPass) {
+          inputLogin.value = loginVal;
+          inputPass.value = passVal;
+          const errBox = document.getElementById('login-error-msg');
+          if (errBox) errBox.style.display = 'none';
+          inputLogin.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          inputLogin.focus();
+        }
+      });
+    });
 
     // Nasluch formularza logowania
     const form = document.getElementById('login-form');
@@ -295,10 +411,25 @@
         const passVal = document.getElementById('input-password').value.trim();
         const errBox = document.getElementById('login-error-msg');
 
-        const foundUser = appState.users.find(function(u) {
+        let foundUser = appState.users.find(function(u) {
           const matchLogin = u.login.toLowerCase() === loginVal.toLowerCase() || u.id.toLowerCase() === loginVal.toLowerCase();
           return matchLogin && u.password === passVal;
         });
+
+        if (!foundUser) {
+          const demoMatch = DEMO_USERS.find(function(u) {
+            const matchLogin = u.login.toLowerCase() === loginVal.toLowerCase() || u.id.toLowerCase() === loginVal.toLowerCase();
+            return matchLogin && u.password === passVal;
+          });
+          if (demoMatch) {
+            foundUser = JSON.parse(JSON.stringify(demoMatch));
+            appState.users.push(foundUser);
+            const demoAstro = DEMO_ASTRONAUTS.find(function(a) { return a.id === demoMatch.id; });
+            if (demoAstro && !appState.astronauts.some(function(a) { return a.id === demoAstro.id; })) {
+              appState.astronauts.push(JSON.parse(JSON.stringify(demoAstro)));
+            }
+          }
+        }
 
         if (foundUser) {
           appState.currentUser = foundUser.id;
@@ -344,6 +475,11 @@
 
   // Pulpit dla Kierownika Misji
   function renderPulpitCommander(container) {
+    startScheduleCountdown();
+    const hrs = String(Math.floor(scheduleCountdownSeconds / 3600)).padStart(2, '0');
+    const mins = String(Math.floor((scheduleCountdownSeconds % 3600) / 60)).padStart(2, '0');
+    const secs = String(scheduleCountdownSeconds % 60).padStart(2, '0');
+    const initialCountdownFormatted = hrs + ':' + mins + ':' + secs;
     const totalAstro = appState.astronauts.length;
     let normalCount = 0;
     let warningCount = 0;
@@ -448,11 +584,11 @@
     container.innerHTML = `
       <div class="view-header">
         <div>
-          <h1 class="view-title">Centrum Nadzoru Medycznego Misji</h1>
+          <h1 class="view-title">Centrum Nadzoru Misji</h1>
           <p class="view-subtitle">Podsumowanie biotelemetrii calej zalogi stacji orbitalnej Horyzont Jeden</p>
         </div>
         <div class="role-indicator-badge">
-          Panel Glowny Kierownika Misji
+          Panel Glowny Kierownika
         </div>
       </div>
 
@@ -534,6 +670,34 @@
         </div>
       </div>
 
+      <div class="dashboard-quick-schedule-card">
+        <div class="quick-countdown-box">
+          <div class="countdown-clock-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-cyan font-bold">Harmonogram badan : Minutnik odliczajacy czas:</div>
+            <div class="quick-countdown-digits live-schedule-countdown">${initialCountdownFormatted}</div>
+            <div class="text-secondary text-xs mt-1">Najblizsze badanie: Pomiar cisnienia tetniczego i SpO2 : Adam Kolosa o 17:15 UTC</div>
+          </div>
+        </div>
+
+        <div class="d-flex align-center gap-3 flex-wrap">
+          <div class="quick-fifo-badge-box">
+            <span class="status-pill badge-warning">${(appState.scheduleData && appState.scheduleData.overdueFifoQueue ? appState.scheduleData.overdueFifoQueue.length : 2)} zaleglosci w kolejce FIFO</span>
+          </div>
+          <button id="btn-quick-fifo-action" class="btn btn-outline btn-sm">
+            Obsluz zaleglosci FIFO
+          </button>
+          <button id="btn-quick-full-schedule" class="btn btn-primary btn-sm">
+            Pelny harmonogram i instrukcje
+          </button>
+        </div>
+      </div>
+
       <div class="dashboard-split-layout">
         <div class="split-column-main">
           <div class="section-title-bar">
@@ -600,6 +764,24 @@
       });
     });
 
+    const btnQuickFifo = container.querySelector('#btn-quick-fifo-action');
+    if (btnQuickFifo) {
+      btnQuickFifo.addEventListener('click', function() {
+        activeTab = 'instrukcje';
+        instrukcjeSubTab = 'schedule';
+        renderApp();
+      });
+    }
+
+    const btnQuickSched = container.querySelector('#btn-quick-full-schedule');
+    if (btnQuickSched) {
+      btnQuickSched.addEventListener('click', function() {
+        activeTab = 'instrukcje';
+        instrukcjeSubTab = 'schedule';
+        renderApp();
+      });
+    }
+
     container.querySelectorAll('.add-order-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
         selectedAstroId = btn.getAttribute('data-astroid');
@@ -610,6 +792,11 @@
 
   // Pulpit dla pojedynczego Astronauty
   function renderPulpitAstronaut(container) {
+    startScheduleCountdown();
+    const hrs = String(Math.floor(scheduleCountdownSeconds / 3600)).padStart(2, '0');
+    const mins = String(Math.floor((scheduleCountdownSeconds % 3600) / 60)).padStart(2, '0');
+    const secs = String(scheduleCountdownSeconds % 60).padStart(2, '0');
+    const initialCountdownFormatted = hrs + ':' + mins + ':' + secs;
     const currentAstro = getAstronautById(appState.currentUser);
     if (!currentAstro) {
       container.innerHTML = '<div class="notice-box">Nie znaleziono profilu astronauty.</div>';
@@ -667,6 +854,34 @@
         <div class="personal-status-desc">
           <div class="desc-heading">Aktualna ocena zespolu medycznego:</div>
           <div class="desc-content">${currentAstro.statusDescription}</div>
+        </div>
+      </div>
+
+      <div class="dashboard-quick-schedule-card">
+        <div class="quick-countdown-box">
+          <div class="countdown-clock-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-cyan font-bold">Harmonogram badan : Minutnik odliczajacy czas:</div>
+            <div class="quick-countdown-digits live-schedule-countdown">${initialCountdownFormatted}</div>
+            <div class="text-secondary text-xs mt-1">Najblizsze badanie: Pomiar cisnienia tetniczego i SpO2 : Adam Kolosa o 17:15 UTC</div>
+          </div>
+        </div>
+
+        <div class="d-flex align-center gap-3 flex-wrap">
+          <div class="quick-fifo-badge-box">
+            <span class="status-pill badge-warning">${(appState.scheduleData && appState.scheduleData.overdueFifoQueue ? appState.scheduleData.overdueFifoQueue.length : 2)} zaleglosci w kolejce FIFO</span>
+          </div>
+          <button id="btn-quick-fifo-action" class="btn btn-outline btn-sm">
+            Obsluz zaleglosci FIFO
+          </button>
+          <button id="btn-quick-full-schedule" class="btn btn-primary btn-sm">
+            Pelny harmonogram i instrukcje
+          </button>
         </div>
       </div>
 
@@ -789,7 +1004,7 @@
 
           <div class="card-section">
             <div class="section-title-bar">
-              <h3>Wytyczne i zalecenia kierownika medycznego</h3>
+              <h3>Wytyczne i zalecenia kierownika</h3>
               <span class="badge-tag">Marek Marczak</span>
             </div>
             <div class="orders-list">
@@ -1266,126 +1481,562 @@
     }
   }
 
-  // WIDOK 3: Instrukcje i Profilaktyka
+
+  // STAN I ZMIENNE DLA MODULU INSTRUKCJE I PROFILAKTYKA (ZGODNIE ZE SPECYFIKACJA PDF)
+  let instrukcjeSubTab = 'step';
+  let activeStepProcId = 'proc-cisnienie';
+  let currentStepIndex = 0;
+  let completedStepsHistory = [];
+  let prophylaxisCategory = 'all';
+  let criticalCategory = 'all';
+  let prophylaxisSearch = '';
+  let criticalSearch = '';
+  let scheduleCountdownSeconds = 2720;
+  let countdownTimerStarted = false;
+
+  function startScheduleCountdown() {
+    if (countdownTimerStarted) return;
+    countdownTimerStarted = true;
+    setInterval(function() {
+      if (scheduleCountdownSeconds > 0) {
+        scheduleCountdownSeconds--;
+      } else {
+        scheduleCountdownSeconds = 3600;
+      }
+      const hrs = String(Math.floor(scheduleCountdownSeconds / 3600)).padStart(2, '0');
+      const mins = String(Math.floor((scheduleCountdownSeconds % 3600) / 60)).padStart(2, '0');
+      const secs = String(scheduleCountdownSeconds % 60).padStart(2, '0');
+      const formatted = hrs + ':' + mins + ':' + secs;
+
+      const timerEls = document.querySelectorAll('.live-schedule-countdown');
+      timerEls.forEach(function(el) {
+        el.textContent = formatted;
+      });
+    }, 1000);
+  }
+
+  // WIDOK 3: Instrukcje i Profilaktyka wedlug specyfikacji PDF
   function renderInstrukcje() {
     const mainEl = document.getElementById('app-main');
+    startScheduleCountdown();
 
-    const categories = [
-      { id: 'all', name: 'Wszystkie procedury' },
-      { id: 'Uklad miesniowo szkieletowy', name: 'Uklad miesniowo szkieletowy' },
-      { id: 'Ochrona radiacyjna', name: 'Ochrona radiacyjna' },
-      { id: 'Uklad krazenia i plyny', name: 'Uklad krazenia i plyny' },
-      { id: 'Higiena snu i rytm dobowy', name: 'Higiena snu i rytm dobowy' },
-      { id: 'Adaptacja sensoryczna SAS', name: 'Adaptacja sensoryczna SAS' }
-    ];
+    const hrs = String(Math.floor(scheduleCountdownSeconds / 3600)).padStart(2, '0');
+    const mins = String(Math.floor((scheduleCountdownSeconds % 3600) / 60)).padStart(2, '0');
+    const secs = String(scheduleCountdownSeconds % 60).padStart(2, '0');
+    const initialCountdownFormatted = hrs + ':' + mins + ':' + secs;
 
-    let categoryPillsHtml = '';
-    categories.forEach(function(cat) {
-      const activeClass = filterCategory === cat.id ? 'active' : '';
-      categoryPillsHtml += `
-        <button class="filter-pill ${activeClass}" data-cat="${cat.id}">
-          ${cat.name}
-        </button>
-      `;
-    });
+    let subviewHtml = '';
 
-    // Filtrowanie instrukcji
-    let filtered = appState.instructions.filter(function(inst) {
-      const matchCat = filterCategory === 'all' || inst.category === filterCategory;
-      const matchSearch = !searchQuery || 
-        inst.title.toLowerCase().indexOf(searchQuery.toLowerCase()) !== -1 ||
-        inst.category.toLowerCase().indexOf(searchQuery.toLowerCase()) !== -1 ||
-        inst.rationale.toLowerCase().indexOf(searchQuery.toLowerCase()) !== -1;
-      return matchCat && matchSearch;
-    });
+    // PODWIDOK 1: PROCEDURY KROK PO KROKU
+    if (instrukcjeSubTab === 'step') {
+      const procedures = appState.stepProcedures || [];
+      const currentProc = procedures.find(function(p) { return p.id === activeStepProcId; }) || procedures[0];
+      const totalSteps = currentProc ? currentProc.steps.length : 1;
+      const isFinished = currentStepIndex >= totalSteps;
+      const currentStepText = (!isFinished && currentProc) ? currentProc.steps[currentStepIndex] : '';
+      const progressPercent = isFinished ? 100 : Math.round((currentStepIndex / totalSteps) * 100);
 
-    let cardsHtml = '';
-    if (filtered.length > 0) {
-      filtered.forEach(function(inst) {
-        let stepsHtml = '';
-        inst.steps.forEach(function(step) {
-          stepsHtml += `<li class="instruction-step-item">${step}</li>`;
+      let procOptionsHtml = '';
+      procedures.forEach(function(p) {
+        const sel = p.id === activeStepProcId ? 'selected' : '';
+        procOptionsHtml += `<option value="${p.id}" ${sel}>${p.name} : Kod: ${p.code}</option>`;
+      });
+
+      let historyStepsHtml = '';
+      if (currentProc) {
+        currentProc.steps.forEach(function(st, idx) {
+          let stepClass = 'upcoming';
+          let statusText = 'Oczekuje';
+          if (idx < currentStepIndex) {
+            stepClass = 'completed';
+            statusText = 'Zrealizowano pomyslnie';
+          } else if (idx === currentStepIndex && !isFinished) {
+            stepClass = 'active';
+            statusText = 'W trakcie realizacji';
+          }
+          historyStepsHtml += `
+            <div class="history-step-item ${stepClass}">
+              <div class="d-flex justify-between">
+                <strong>Krok ${idx + 1} z ${totalSteps}</strong>
+                <span class="step-status-chip">${statusText}</span>
+              </div>
+              <div class="mt-1">${st}</div>
+            </div>
+          `;
         });
+      }
 
-        cardsHtml += `
-          <div class="instruction-card">
-            <div class="inst-card-top">
-              <span class="inst-category-chip">${inst.category}</span>
-              <span class="status-pill badge-normal">${inst.severity}</span>
-            </div>
-            <h3 class="inst-title">${inst.title}</h3>
-            
-            <div class="inst-body-block">
-              <h4 class="inst-block-heading">Procedura postepowania:</h4>
-              <ol class="instruction-steps-list">
-                ${stepsHtml}
-              </ol>
+      subviewHtml = `
+        <div class="step-proc-selector-bar">
+          <div>
+            <label for="select-step-proc" class="form-label mb-1">Aktywna procedura pomiarowa:</label>
+            <select id="select-step-proc" class="form-input">
+              ${procOptionsHtml}
+            </select>
+          </div>
+          <div>
+            <button id="btn-restart-proc" class="btn btn-outline btn-sm">Rozpocznij procedure od nowa</button>
+          </div>
+        </div>
+
+        <div class="step-proc-container">
+          <div class="current-step-card">
+            <div class="d-flex justify-between align-center flex-wrap gap-2">
+              <span class="current-step-badge">Procedura sekwencyjna : ${currentProc ? currentProc.code : ''}</span>
+              <span class="badge-tag">${currentProc ? currentProc.category : ''}</span>
             </div>
 
-            <div class="inst-rationale-box">
-              <div class="rationale-heading">Uzasadnienie fizjologiczne:</div>
-              <p class="rationale-text">${inst.rationale}</p>
+            <div>
+              <h2 class="current-step-title">${currentProc ? currentProc.name : 'Procedura pomiaru'}</h2>
+              <p class="text-secondary mt-1">${currentProc ? currentProc.description : ''}</p>
             </div>
 
-            <div class="inst-footer">
-              <span class="inst-code">Kod protokolu: HMS-PR-${inst.id.toUpperCase()}</span>
-              <button class="btn btn-outline btn-sm confirm-read-btn" data-id="${inst.id}">Potwierdz zaznajomienie</button>
+            <div class="step-progress-wrapper">
+              <div class="d-flex justify-between text-muted text-xs mb-1">
+                <span>Postep procedury: ${progressPercent} procent</span>
+                <span>Krok ${Math.min(currentStepIndex + 1, totalSteps)} z ${totalSteps}</span>
+              </div>
+              <div class="step-progress-bar-wrap">
+                <div class="step-progress-fill" style="width: ${progressPercent}%;"></div>
+              </div>
+            </div>
+
+            ${!isFinished ? `
+              <div class="current-step-instruction">
+                <div class="text-xs uppercase text-cyan font-bold mb-2">Aktualnie wymagany krok:</div>
+                <div class="step-instruction-main">${currentStepText}</div>
+              </div>
+
+              <div class="current-step-actions">
+                <button id="btn-next-step" class="btn btn-primary btn-lg">
+                  ${currentStepIndex === totalSteps - 1 ? 'Zatwierdz i zakoncz procedure' : 'Wykonano / Przejdz dalej'}
+                </button>
+                <span class="text-muted text-xs">Podejscie sekwencyjne: na ekranie prezentowany jest wylacznie jeden biezacy krok.</span>
+              </div>
+            ` : `
+              <div class="alert-banner-box banner-info">
+                <div class="alert-text-wrap">
+                  <strong>Procedura pomiarowa zrealizowana pomyslnie</strong>
+                  <p class="mt-1">Wszystkie etapy procedury ${currentProc.name} zostaly wykonane, zweryfikowane i zarejestrowane w bazie danych stacji.</p>
+                </div>
+              </div>
+
+              <div class="current-step-actions">
+                <button id="btn-restart-proc-fin" class="btn btn-primary">Wykonaj procedure ponownie</button>
+                <button id="btn-go-schedule" class="btn btn-outline">Przejdz do harmonogramu badan</button>
+              </div>
+            `}
+          </div>
+
+          <div class="steps-history-panel">
+            <h3 class="steps-history-heading">Historia wykonanych krokow</h3>
+            <p class="text-muted text-xs mb-3">Podglad wszystkich wczesniejszych etapow instrukcji ulatwia weryfikacje poprawnosci bez przerywania biezacej pracy.</p>
+            <div class="history-steps-list">
+              ${historyStepsHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // PODWIDOK 2: HARMONOGRAM BADAN I KOLEJKA FIFO
+    else if (instrukcjeSubTab === 'schedule') {
+      const schedule = appState.scheduleData || { upcomingTests: [], overdueFifoQueue: [] };
+
+      let upcomingHtml = '';
+      (schedule.upcomingTests || []).forEach(function(item) {
+        upcomingHtml += `
+          <div class="fifo-item-card">
+            <div class="d-flex justify-between align-center">
+              <strong>${item.title}</strong>
+              <span class="status-pill badge-normal">${item.timeUtc}</span>
+            </div>
+            <div class="text-secondary text-sm">Osoba badana: <strong>${item.astronaut}</strong></div>
+            <div class="mt-2">
+              <button class="btn btn-outline btn-xs start-specific-proc-btn" data-proc="${item.procId}">
+                Uruchom procedure pomiarowa
+              </button>
             </div>
           </div>
         `;
       });
-    } else {
-      cardsHtml = '<div class="empty-state-box">Brak procedur spelniajacych kryteria wyszukiwania.</div>';
+
+      let overdueHtml = '';
+      (schedule.overdueFifoQueue || []).forEach(function(item, idx) {
+        overdueHtml += `
+          <div class="fifo-item-card">
+            <div class="d-flex justify-between align-center">
+              <span class="fifo-order-badge">Kolejka FIFO: Pozycja ${idx + 1} - ${idx === 0 ? 'Najstarsza zaleglosc' : 'Zaleglosc'}</span>
+              <span class="status-pill badge-warning">${item.delay}</span>
+            </div>
+            <div class="font-bold text-white mt-1">${item.title}</div>
+            <div class="text-secondary text-sm">Osoba badana: <strong>${item.astronaut}</strong> | Planowano: ${item.dueTime}</div>
+            <div class="mt-2">
+              <button class="btn btn-primary btn-xs run-fifo-item-btn" data-proc="${item.procId}" data-id="${item.id}">
+                ${idx === 0 ? 'Wykonaj najstarsza zaleglosc w pierwszej kolejnosci' : 'Nadrabiaj zaleglosc'}
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      if (!overdueHtml) {
+        overdueHtml = '<div class="empty-state-box">Brak zaleglych pomiarow. Kolejka FIFO jest czysta.</div>';
+      }
+
+      subviewHtml = `
+        <div class="countdown-banner-card">
+          <div>
+            <div class="text-xs uppercase text-cyan font-bold mb-1">Minutnik odliczajacy czas do kolejnego badania:</div>
+            <div class="countdown-digits live-schedule-countdown">${initialCountdownFormatted}</div>
+            <div class="text-secondary text-sm mt-1">Najblizszy zaplanowany pomiar: Pomiar cisnienia tetniczego i saturacji SpO2 : Adam Kolosa</div>
+          </div>
+          <div>
+            <button class="btn btn-primary btn-lg start-specific-proc-btn" data-proc="proc-cisnienie">
+              Uruchom biezace badanie
+            </button>
+          </div>
+        </div>
+
+        <div class="schedule-columns-grid">
+          <div class="fifo-card-panel">
+            <div class="fifo-panel-head">
+              <div>
+                <h3 class="font-bold text-lg text-white">Zalegle badania i pomiary: Kolejka FIFO</h3>
+                <p class="text-muted text-xs mt-1">Pominiete pomiary trafiaja na liste dzialajaca wedlug zasady First In First Out. Najstarsze zaleglosci sa obslugiwane w pierwszej kolejnosci.</p>
+              </div>
+              <span class="status-pill badge-warning">${(schedule.overdueFifoQueue || []).length} w kolejce</span>
+            </div>
+            <div class="fifo-items-wrap">
+              ${overdueHtml}
+            </div>
+          </div>
+
+          <div class="fifo-card-panel">
+            <div class="fifo-panel-head">
+              <div>
+                <h3 class="font-bold text-lg text-white">Nadchodzace badania i pomiary</h3>
+                <p class="text-muted text-xs mt-1">Harmonogram przyszlych zdarzen zaplanowanych w kalendarzu umozliwiajacy szybki wglad w najblizsze obowiazki.</p>
+              </div>
+              <span class="status-pill badge-normal">${(schedule.upcomingTests || []).length} zaplanowane</span>
+            </div>
+            <div class="upcoming-items-wrap">
+              ${upcomingHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // PODWIDOK 3: ODCHYLENIA OD NORMY I PROFILAKTYKA
+    else if (instrukcjeSubTab === 'prophylaxis') {
+      const categories = [
+        { id: 'all', name: 'Wszystkie odchylenia' },
+        { id: 'Uklad krazenia i regeneracja', name: 'Uklad krazenia i regeneracja' },
+        { id: 'Sen i uklad nerwowy CNS', name: 'Sen i uklad nerwowy CNS' },
+        { id: 'Miesnie i uklad ruchu', name: 'Miesnie i uklad ruchu' },
+        { id: 'Biochemia i stres: analiza potu', name: 'Biochemia i stres: analiza potu' },
+        { id: 'Srodowisko kabiny i skafandra', name: 'Srodowisko kabiny i skafandra' }
+      ];
+
+      let pillsHtml = '';
+      categories.forEach(function(cat) {
+        const act = prophylaxisCategory === cat.id ? 'active' : '';
+        pillsHtml += `<button class="filter-pill ${act} filter-proph-btn" data-cat="${cat.id}">${cat.name}</button>`;
+      });
+
+      const guidelines = appState.prophylaxisGuidelines || [];
+      const filtered = guidelines.filter(function(item) {
+        const matchCat = prophylaxisCategory === 'all' || item.category === prophylaxisCategory;
+        const matchSearch = !prophylaxisSearch ||
+          item.symptom.toLowerCase().indexOf(prophylaxisSearch.toLowerCase()) !== -1 ||
+          item.guideline.toLowerCase().indexOf(prophylaxisSearch.toLowerCase()) !== -1 ||
+          item.category.toLowerCase().indexOf(prophylaxisSearch.toLowerCase()) !== -1;
+        return matchCat && matchSearch;
+      });
+
+      let prophCardsHtml = '';
+      filtered.forEach(function(item) {
+        prophCardsHtml += `
+          <div class="prophylaxis-item-card">
+            <div class="d-flex justify-between align-center">
+              <span class="inst-category-chip">${item.category}</span>
+              <span class="status-pill badge-warning">Wykryto odchylenie</span>
+            </div>
+            <h4 class="prophylaxis-symptom-title">${item.symptom}</h4>
+            <div class="prophylaxis-action-box">
+              <div class="text-xs font-bold uppercase text-cyan mb-1">Gotowa instrukcja profilaktyczna:</div>
+              <div>${item.guideline}</div>
+            </div>
+            <div class="mt-auto pt-2">
+              <button class="btn btn-outline btn-xs apply-proph-btn">Potwierdz wdrozenie profilaktyki</button>
+            </div>
+          </div>
+        `;
+      });
+
+      if (!prophCardsHtml) {
+        prophCardsHtml = '<div class="empty-state-box">Brak instrukcji profilaktycznych dla wybranych kryteriow wyszukiwania.</div>';
+      }
+
+      subviewHtml = `
+        <div class="filter-bar-card">
+          <div class="search-box-wrap">
+            <input type="text" id="proph-search-input" class="search-input" placeholder="Wyszukaj parametr lub objaw odchylenia od normy..." value="${prophylaxisSearch}" />
+          </div>
+          <div class="categories-row">
+            ${pillsHtml}
+          </div>
+        </div>
+
+        <div class="prophylaxis-grid">
+          ${prophCardsHtml}
+        </div>
+      `;
+    }
+
+    // PODWIDOK 4: SCENARIUSZE KRYTYCZNE
+    else if (instrukcjeSubTab === 'critical') {
+      const categories = [
+        { id: 'all', name: 'Wszystkie scenariusze ratunkowe' },
+        { id: 'Uklad krazenia i zagrozenie zycia', name: 'Uklad krazenia i zagrozenie zycia' },
+        { id: 'Uklad nerwowy CNS i funkcje poznawcze', name: 'Uklad nerwowy CNS i funkcje poznawcze' },
+        { id: 'Miesnie, uklad ruchu i urazy mechaniczne', name: 'Miesnie, uklad ruchu i urazy mechaniczne' },
+        { id: 'Biochemia, metabolizm i ostre stany zapalne: analiza potu', name: 'Biochemia i metabolizm' },
+        { id: 'Zagrozenia srodowiskowe kabiny i skafandra', name: 'Srodowisko kabiny i skafandra' }
+      ];
+
+      let pillsHtml = '';
+      categories.forEach(function(cat) {
+        const act = criticalCategory === cat.id ? 'active' : '';
+        pillsHtml += `<button class="filter-pill ${act} filter-crit-btn" data-cat="${cat.id}">${cat.name}</button>`;
+      });
+
+      const scenarios = appState.criticalScenarios || [];
+      const filtered = scenarios.filter(function(item) {
+        const matchCat = criticalCategory === 'all' || item.category === criticalCategory;
+        const matchSearch = !criticalSearch ||
+          item.title.toLowerCase().indexOf(criticalSearch.toLowerCase()) !== -1 ||
+          item.action.toLowerCase().indexOf(criticalSearch.toLowerCase()) !== -1 ||
+          item.category.toLowerCase().indexOf(criticalSearch.toLowerCase()) !== -1;
+        return matchCat && matchSearch;
+      });
+
+      let critCardsHtml = '';
+      filtered.forEach(function(item) {
+        critCardsHtml += `
+          <div class="critical-card-item">
+            <div class="d-flex justify-between align-center">
+              <span class="status-pill badge-critical">Procedura alarmowa</span>
+              <span class="inst-category-chip">${item.category}</span>
+            </div>
+            <h4 class="critical-symptom-title">${item.title}</h4>
+            <div class="critical-action-box">
+              <div class="text-xs font-bold uppercase text-red mb-1">Postepowanie ratunkowe zalogi i lekarza misji:</div>
+              <div>${item.action}</div>
+            </div>
+            <div class="mt-auto pt-2">
+              <button class="btn btn-danger btn-xs trigger-emergency-btn">Wszcznij procedure alarmowa</button>
+            </div>
+          </div>
+        `;
+      });
+
+      if (!critCardsHtml) {
+        critCardsHtml = '<div class="empty-state-box">Brak scenariuszy krytycznych dla wybranych filtrow.</div>';
+      }
+
+      subviewHtml = `
+        <div class="critical-header-alert">
+          <h3 class="font-bold text-lg text-white mb-1">Scenariusze Krytyczne: Wymagajace Zewnetrznej Ingerencji i Akcji Ratunkowej</h3>
+          <p class="text-secondary text-sm">W przypadku wystapienia stanow bezposredniego zagrozenia zycia lub dekompensacji fizjologicznej nalezy bezwzglednie wdrozyc ponizsze protokoly ratunkowe.</p>
+        </div>
+
+        <div class="filter-bar-card">
+          <div class="search-box-wrap">
+            <input type="text" id="crit-search-input" class="search-input" placeholder="Wyszukaj scenariusz krytyczny..." value="${criticalSearch}" />
+          </div>
+          <div class="categories-row">
+            ${pillsHtml}
+          </div>
+        </div>
+
+        <div class="prophylaxis-grid">
+          ${critCardsHtml}
+        </div>
+      `;
     }
 
     mainEl.innerHTML = `
       <div class="view-header">
         <div>
-          <h1 class="view-title">Baza Instrukcji i Profilaktyki Kosmicznej</h1>
-          <p class="view-subtitle">Obowiazujace standardy medyczne, schematy postepowania oraz profilaktyka zmian w mikrograwitacji</p>
+          <h1 class="view-title">Instrukcje, Harmonogram i Profilaktyka Medyczna</h1>
+          <p class="view-subtitle">Sekwencyjne procedury krok po kroku, kolejka zaleglosci FIFO oraz wytyczne profilaktyczne i ratunkowe</p>
         </div>
-        <div class="badge-tag">Wersja protokołu 4.2</div>
+        <div class="badge-tag">Protokol ARES-MED-V5</div>
       </div>
 
-      <div class="filter-bar-card">
-        <div class="search-box-wrap">
-          <input type="text" id="instruction-search" class="search-input" placeholder="Szukaj procedury lub objawu..." value="${searchQuery}" />
-        </div>
-        <div class="categories-row">
-          ${categoryPillsHtml}
-        </div>
+      <div class="instrukcje-subnav">
+        <button class="subnav-btn ${instrukcjeSubTab === 'step' ? 'active' : ''}" data-subtab="step">
+          1. Procedury pomiaru krok po kroku
+        </button>
+        <button class="subnav-btn ${instrukcjeSubTab === 'schedule' ? 'active' : ''}" data-subtab="schedule">
+          2. Harmonogram i kolejka FIFO
+        </button>
+        <button class="subnav-btn ${instrukcjeSubTab === 'prophylaxis' ? 'active' : ''}" data-subtab="prophylaxis">
+          3. Odchylenia od normy i profilaktyka
+        </button>
+        <button class="subnav-btn ${instrukcjeSubTab === 'critical' ? 'active' : ''}" data-subtab="critical">
+          4. Scenariusze krytyczne i ratunkowe
+        </button>
       </div>
 
-      <div class="instructions-grid">
-        ${cardsHtml}
-      </div>
+      ${subviewHtml}
     `;
 
-    // Nasluch filtrow
-    mainEl.querySelectorAll('.filter-pill').forEach(function(btn) {
+    // Nasluch zmiany podzakladek
+    mainEl.querySelectorAll('.subnav-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
-        filterCategory = btn.getAttribute('data-cat');
+        instrukcjeSubTab = btn.getAttribute('data-subtab');
         renderInstrukcje();
       });
     });
 
-    const searchInput = document.getElementById('instruction-search');
-    if (searchInput) {
-      searchInput.addEventListener('input', function(e) {
-        searchQuery = e.target.value.trim();
+    // Nasluch zmiany procedury w kroku po kroku
+    const selectProcEl = document.getElementById('select-step-proc');
+    if (selectProcEl) {
+      selectProcEl.addEventListener('change', function() {
+        activeStepProcId = selectProcEl.value;
+        currentStepIndex = 0;
+        completedStepsHistory = [];
         renderInstrukcje();
       });
     }
 
-    mainEl.querySelectorAll('.confirm-read-btn').forEach(function(btn) {
+    // Nasluch przycisku Wykonano / Przejdz dalej
+    const nextStepBtn = document.getElementById('btn-next-step');
+    if (nextStepBtn) {
+      nextStepBtn.addEventListener('click', function() {
+        const procedures = appState.stepProcedures || [];
+        const currentProc = procedures.find(function(p) { return p.id === activeStepProcId; }) || procedures[0];
+        const totalSteps = currentProc ? currentProc.steps.length : 1;
+        if (currentStepIndex < totalSteps) {
+          completedStepsHistory.push({
+            step: currentStepIndex + 1,
+            text: currentProc.steps[currentStepIndex],
+            time: new Date().toISOString()
+          });
+          currentStepIndex++;
+        }
+        renderInstrukcje();
+      });
+    }
+
+    // Nasluch restartu procedury
+    const restartBtn = document.getElementById('btn-restart-proc');
+    if (restartBtn) {
+      restartBtn.addEventListener('click', function() {
+        currentStepIndex = 0;
+        completedStepsHistory = [];
+        renderInstrukcje();
+      });
+    }
+    const restartFinBtn = document.getElementById('btn-restart-proc-fin');
+    if (restartFinBtn) {
+      restartFinBtn.addEventListener('click', function() {
+        currentStepIndex = 0;
+        completedStepsHistory = [];
+        renderInstrukcje();
+      });
+    }
+    const goSchedBtn = document.getElementById('btn-go-schedule');
+    if (goSchedBtn) {
+      goSchedBtn.addEventListener('click', function() {
+        instrukcjeSubTab = 'schedule';
+        renderInstrukcje();
+      });
+    }
+
+    // Nasluch uruchomienia procedury z harmonogramu
+    mainEl.querySelectorAll('.start-specific-proc-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
-        btn.textContent = 'Zaznajomienie potwierdzone';
+        const procId = btn.getAttribute('data-proc');
+        if (procId) {
+          activeStepProcId = procId;
+          currentStepIndex = 0;
+          completedStepsHistory = [];
+          instrukcjeSubTab = 'step';
+          renderInstrukcje();
+        }
+      });
+    });
+
+    // Nasluch nadrabiania z kolejki FIFO
+    mainEl.querySelectorAll('.run-fifo-item-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const procId = btn.getAttribute('data-proc');
+        const fifoId = btn.getAttribute('data-id');
+        if (appState.scheduleData && appState.scheduleData.overdueFifoQueue) {
+          appState.scheduleData.overdueFifoQueue = appState.scheduleData.overdueFifoQueue.filter(function(i) {
+            return i.id !== fifoId;
+          });
+        }
+        if (procId) {
+          activeStepProcId = procId;
+          currentStepIndex = 0;
+          completedStepsHistory = [];
+          instrukcjeSubTab = 'step';
+          renderInstrukcje();
+        }
+      });
+    });
+
+    // Nasluch filtrowania profilaktyki
+    mainEl.querySelectorAll('.filter-proph-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        prophylaxisCategory = btn.getAttribute('data-cat');
+        renderInstrukcje();
+      });
+    });
+    const prophSearchInput = document.getElementById('proph-search-input');
+    if (prophSearchInput) {
+      prophSearchInput.addEventListener('input', function(e) {
+        prophylaxisSearch = e.target.value.trim();
+        renderInstrukcje();
+      });
+    }
+    mainEl.querySelectorAll('.apply-proph-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        btn.textContent = 'Zalecenie wdrozone';
         btn.disabled = true;
         btn.classList.remove('btn-outline');
         btn.classList.add('btn-primary');
       });
     });
+
+    // Nasluch filtrowania scenariuszy krytycznych
+    mainEl.querySelectorAll('.filter-crit-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        criticalCategory = btn.getAttribute('data-cat');
+        renderInstrukcje();
+      });
+    });
+    const critSearchInput = document.getElementById('crit-search-input');
+    if (critSearchInput) {
+      critSearchInput.addEventListener('input', function(e) {
+        criticalSearch = e.target.value.trim();
+        renderInstrukcje();
+      });
+    }
+    mainEl.querySelectorAll('.trigger-emergency-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        window.alert('Wszczeto procedure alarmowa. Raport telemetryczny zostal skierowany do konsoli lekarza misji oraz personelu pokladowego.');
+      });
+    });
+
+    enforceConstraints(mainEl);
   }
+
 
   // WIDOK 4: Modul Motywacji
   function renderMotywacja() {
@@ -2935,6 +3586,12 @@
             if (serverState.astronauts) appState.astronauts = serverState.astronauts;
             if (serverState.users) appState.users = serverState.users;
             if (serverState.currentUser) appState.currentUser = serverState.currentUser;
+            if (serverState.stepProcedures && serverState.stepProcedures.length > 0) appState.stepProcedures = serverState.stepProcedures;
+            if (serverState.scheduleData) appState.scheduleData = serverState.scheduleData;
+            if (serverState.prophylaxisGuidelines && serverState.prophylaxisGuidelines.length > 0) appState.prophylaxisGuidelines = serverState.prophylaxisGuidelines;
+            if (serverState.criticalScenarios && serverState.criticalScenarios.length > 0) appState.criticalScenarios = serverState.criticalScenarios;
+            sanitizeCrewState(appState);
+            saveState(appState);
           }
           renderApp();
           startUtcClock();
