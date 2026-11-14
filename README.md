@@ -119,3 +119,16 @@ The background stream supports four scenarios selectable in the live control bar
 - `app/assets/` - Application logo and favicon in SVG and PNG formats
 - `app/start-server.bat` - Windows startup script
 - `app/test-compliance.ps1` - Formatting compliance check script
+- `[ENG] HMS-of-A_Presentation.pdf` - 7-slide 16:9 English executive PDF presentation of the full project
+
+## Presentation
+
+An executive 7-slide widescreen PDF overview is available in `[ENG] HMS-of-A_Presentation.pdf`. It synthesizes the project pitch, live walkthrough, and repository implementation across seven dense slides:
+
+1. **Title, Context and Multimodal Architecture** - NASA Space Apps 2026 Poznan challenge context, orbital frequency and chronic spaceflight hazards, and the 5-input end-to-end architecture mapping to `app/`, `app/model/`, `local_camera_models/`, and `docs/space-camera.md`.
+2. **Proprietary 3-Layer AI Engine, 20/7 Parameter Matrix and OSDR Feed** - Reference clinical limits, norm-gated EWMA personal baselines, the `11-16-4-16-11` denoising autoencoder, temporal safeguards, 6 cross-domain clinical correlation rules, the 20 monitored metrics across 7 domains, and live NASA OSDR RR-1 habitat telemetry replay.
+3. **Live Platform Demo: Commander and Astronaut Portals** - Flight Commander priority triage on Horizon One under Marek Marczak alongside Adam Kolosa's crew portal, trend charts, 5 guided zero-G procedures, 18 emergency protocols, and the 4-4-4-4 breathing tool.
+4. **Behavioral Adherence and Crew Motivation Module** - Overview of the 5-tab behavioral engine covering readiness tracking, 7-day and 30-day health stability, streak economics via `100 + streak * 5`, crew punctuality ranking, and 3-hour flexible check windows with Day and Night UI switching.
+5. **Offline Edge AI: Computer Vision and Acoustic Biomarkers** - Contactless MediaPipe 478-landmark fatigue tracking, `oczy.onnx`, `emocje_twarz.onnx`, `FatigueTracker`, POS rPPG heart rate, 12 live Praat voice biomarkers, and `emocje_glos.onnx` `wav2vec2-base` RAVDESS emotion analysis.
+6. **Edge Hardware Concept, Privacy, Applications and Tech Stack** - Microgravity optical and acoustic edge specifications from `docs/space-camera.md`, zero-downlink scalar telemetry privacy, target space and terrestrial deployment sectors, full software stack, and a repository QR link.
+7. **Validation Datasets, Team Linkbeing and Bibliography** - NASA OSDR, PhysioNet, vision/speech ML corpora, Onboard Edge versus Mission Control topology, the 6-member Team Linkbeing roster, and the 13 cited space-medicine and NASA publications.
